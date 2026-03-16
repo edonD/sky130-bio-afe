@@ -80,3 +80,48 @@ Choose: Gm-C, active-RC with pseudo-resistors, switched-capacitor, biquad, Salle
 ## README.md — Your Final Deliverable
 
 Must contain: status, spec table, all plots with analysis, circuit description, rationale, tried/rejected, limitations (especially PVT sensitivity of the high-pass corner), experiment history.
+
+## The Experiment Loop
+
+LOOP FOREVER:
+
+1. **Think.** Is f_low actually < 1 Hz? Does the step response show real DC rejection? What does the Bode plot look like?
+2. **Modify.** Change `design.cir`, `parameters.csv`, or `evaluate.py`.
+3. **Commit.** `git add -A && git commit -m 'filter: <what you changed>'`
+4. **Run.** `python evaluate.py > run.log 2>&1`
+5. **Read results.** `grep "score\|PASS\|FAIL\|Error" run.log | head -20`
+6. **Study the plots.** See "Plot Analysis" below. Mandatory before keep/discard.
+7. **Log.** Append to `results.tsv`.
+8. **Keep or discard.**
+   - Score improved AND the Bode plot shows clean bandpass AND the step response recovers → **keep**. Update README. Push.
+   - Score improved BUT the step response doesn't actually reject DC → **investigate**. The high-pass isn't working.
+   - Score equal or worse → `git reset --hard HEAD~1`.
+9. **Repeat.** Never stop.
+
+Phase B after score=1.0: PVT (TB6 — especially pseudo-resistor variation), ECG transient (TB4), noise, margin improvement. Keep looping.
+
+## Logging
+
+`results.tsv` — tab-separated, NOT committed:
+
+```
+step	commit	score	specs_met	description
+0	a1b2c3d	0.30	1/6	Gm-C biquad — f_low = 15 Hz (too high)
+1	b2c3d4e	0.45	2/6	added pseudo-resistor HPF — f_low = 0.8 Hz
+2	c3d4e5f	0.65	3/6	stopband only 14 dB at 250 Hz — need higher order
+3	d4e5f6g	0.80	4/6	added 2nd-order LPF stage — 22 dB at 250 Hz
+4	e5f6g7h	1.00	6/6	all pass nominal. PVT: f_low shifts to 5 Hz at 125°C
+5	f6g7h8i	1.00	6/6	biased pseudo-R gate — PVT spread < 3x
+```
+
+## Plot Analysis
+
+**`plots/frequency_response.png`** — The Bode plot is the most important plot for the filter. It should show a clear bandpass: gain rising from low frequencies (high-pass), flat in the passband (0.5–150 Hz), then rolling off (low-pass). Mark f_low and f_high with vertical lines. If f_low is at 10 Hz instead of 0.5 Hz, the high-pass time constant is 20x too short — increase the pseudo-resistor value or the coupling capacitor. If f_high is at 50 Hz, the low-pass is too aggressive. The AC sweep must start at 0.01 Hz to actually measure the 0.5 Hz corner — if it starts at 1 Hz, you're not seeing f_low.
+
+**`plots/step_response.png`** — This is the acid test for the high-pass. Apply a 300 mV step (simulating electrode placement) and watch the output. It should spike and then decay back to baseline within 1–5 seconds. If it stays at 300 mV × gain, the DC is not being blocked. If it recovers in 0.1 seconds, f_low is too high (around 1.6 Hz, not 0.5 Hz). The recovery time constant ≈ 1/(2π × f_low) — for f_low = 0.5 Hz, that's ~320 ms to reach 37% of initial.
+
+**`plots/ecg_filtering.png`** — Input vs output overlay. The ECG P-QRS-T morphology should be preserved. The P-wave (which has energy down to 0.5 Hz) should be visible — if it's attenuated, f_low is too high. The 60 Hz component (if present in the input) should be visible in the passband (this filter doesn't reject 60 Hz — that's the InAmp's job via CMRR).
+
+**`plots/pvt_frequency_response.png`** — Overlay the Bode plot for all PVT corners. The low-pass corner (f_high) should be relatively stable (set by capacitor ratios). The high-pass corner (f_low) will shift significantly if using pseudo-resistors — document the actual range. If f_low goes from 0.3 Hz to 5 Hz across PVT, that's a 17x variation. Be honest about it.
+
+**System-level check:** "The filter output feeds the ADC. Is the output impedance low enough to drive the ADC sampling capacitor (~5 pF) without droop? At 1 kSPS, the acquisition time is ~500 µs. With Rout = 10 kΩ and C_sample = 5 pF, τ = 50 ns — 10,000× margin. OK." Document in README.

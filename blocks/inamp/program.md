@@ -97,3 +97,49 @@ Choose everything:
 ## README.md — Your Final Deliverable
 
 The only thing I check. Must contain: status banner, spec table, all plots with analysis, circuit description, design rationale, what was tried/rejected, known limitations, experiment history.
+
+## The Experiment Loop
+
+LOOP FOREVER:
+
+1. **Think.** Which specs fail? What do the plots show? What's the weakest point?
+2. **Modify.** Change `design.cir`, `parameters.csv`, or `evaluate.py`.
+3. **Commit.** `git add -A && git commit -m 'inamp: <what you changed>'`
+4. **Run.** `python evaluate.py > run.log 2>&1`
+5. **Read results.** `grep "score\|PASS\|FAIL\|Error" run.log | head -20`
+6. **Study the plots.** See "Plot Analysis" below. Mandatory before keep/discard.
+7. **Log.** Append to `results.tsv`.
+8. **Keep or discard.**
+   - Score improved AND plots are physically correct → **keep**. Update README.md. Push.
+   - Score improved BUT waveforms look wrong (output railed, noise unrealistically low, CMRR too good to be true) → **investigate**.
+   - Score equal or worse → `git reset --hard HEAD~1`.
+9. **Repeat.** Never stop.
+
+Phase B after score=1.0: PVT (TB8), Monte Carlo (TB9), realistic ECG transient (TB7), margin improvement. Keep looping.
+
+## Logging
+
+`results.tsv` — tab-separated, NOT committed:
+
+```
+step	commit	score	specs_met	description
+0	a1b2c3d	0.25	1/6	3-opamp topology — output railed with 300mV offset
+1	b2c3d4e	0.40	2/6	switched to capacitively-coupled — gain OK but CMRR only 60dB
+2	c3d4e5f	0.75	4/6	added chopping at 10kHz — CMRR >100dB now
+3	d4e5f6g	0.85	5/6	increased input pair W/L — noise down to 1.8 µVrms (still >1.5)
+4	e5f6g7h	1.00	6/6	bias current 2µA → 4µA — noise 1.2 µVrms. All pass.
+```
+
+## Plot Analysis
+
+After EVERY run, study these critically:
+
+**`plots/noise_spectral_density.png`** — Should show 1/f noise rising at low frequencies and a white noise floor at higher frequencies. The 1/f corner should be somewhere between 10 Hz and 10 kHz depending on the topology. If the spectrum is flat down to 0.1 Hz, either chopping is working perfectly (good) or the noise simulation is wrong (bad — check). If the integrated noise is < 0.1 µVrms, that's world-class — verify by checking gm and bias current: noise ≈ √(4kT × 2/(gm) × BW). Does it add up?
+
+**`plots/cmrr_vs_freq.png`** — CMRR should be high (> 100 dB) at low frequencies and roll off with frequency. If CMRR is > 120 dB everywhere, verify — that requires near-perfect matching or chopping. If CMRR drops below 80 dB at 60 Hz, the powerline interference won't be rejected enough.
+
+**`plots/ecg_transient.png`** — The output should show a clean, amplified ECG waveform. The R-peak should be clearly visible and properly scaled (1 mV × gain). The 60 Hz interference should be visibly attenuated. If the output is clipped (flat at VDD or VSS), the common-mode input range doesn't accommodate the electrode offset. If the ECG shape is distorted, the bandwidth is too narrow.
+
+**`plots/electrode_offset_tolerance.png`** — Apply ±300 mV DC offset on the inputs. The output must NOT saturate. If it does, the design fails in the real world regardless of what the gain spec says at 0V offset.
+
+**System-level check:** "The InAmp output feeds the PGA. Is the output centered near 0.9V? Is the swing within 0.2–1.6V so the PGA doesn't clip? With a 1 mV ECG × 50 gain = 50 mV swing around 0.9V — that's 0.85V to 0.95V. Comfortable." Report this in README.

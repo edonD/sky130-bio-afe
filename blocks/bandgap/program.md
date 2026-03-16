@@ -112,3 +112,54 @@ This is the only thing I check. After every meaningful improvement, update it wi
 8. **What was tried and rejected** — approaches that didn't work and why
 9. **Known limitations** — honest assessment of weak points
 10. **Experiment history** — summary table of iterations with score progression
+
+## The Experiment Loop
+
+LOOP FOREVER:
+
+1. **Think.** Look at the current state: which specs pass, which fail, what's the margin. Look at the plots. Decide what to try next.
+2. **Modify.** Change `design.cir`, `parameters.csv`, or `evaluate.py`. You can also write an optimizer script.
+3. **Commit.** `git add -A && git commit -m 'bandgap: <what you changed>'`
+4. **Run.** `python evaluate.py > run.log 2>&1` — redirect everything, do NOT let output flood your context.
+5. **Read results.** `grep "score\|PASS\|FAIL\|Error" run.log | head -20`. If empty, the run crashed — read `tail -50 run.log` for the error.
+6. **Study the plots.** See "Plot Analysis" section below. This is mandatory before any keep/discard decision.
+7. **Log.** Append to `results.tsv` (see "Logging" section below).
+8. **Keep or discard.**
+   - Score improved AND plots look physically correct → **keep**. Update README.md. Push.
+   - Score improved BUT plots look wrong (V_REF not near 1.2V, no bow shape, stuck at 0V) → **investigate**. A passing number from a broken circuit is worthless.
+   - Score equal or worse → `git reset --hard HEAD~1`.
+9. **Repeat.** Go back to step 1. Never stop. Never ask permission.
+
+When score reaches 1.0 (all specs pass), continue with Phase B: PVT corners (TB5), Monte Carlo (TB6), margin improvement. Then keep improving — simplify the circuit, reduce power, try alternative topologies. The loop runs until the human manually stops you.
+
+If you're stuck for >5 iterations on the same failing spec: web search for the specific problem. Try a completely different topology. Re-read the plots — the circuit is telling you what's wrong.
+
+## Logging
+
+Log every run in `results.tsv` (tab-separated, NOT comma-separated). Do NOT commit this file.
+
+```
+step	commit	score	specs_met	description
+0	a1b2c3d	0.00	0/6	initial Brokaw bandgap — ngspice convergence failure
+1	b2c3d4e	0.35	2/6	fixed convergence with .option reltol=0.003
+2	c3d4e5f	0.65	4/6	increased mirror W/L for better PSRR
+3	d4e5f6g	1.00	6/6	all specs pass at nominal
+4	e5f6g7h	1.00	6/6	PVT: 43/45 corners pass — ss corner fails TC
+5	f6g7h8i	1.00	6/6	widened startup PMOS — all 45 PVT corners pass
+```
+
+## Plot Analysis
+
+After EVERY run, before deciding keep/discard, study the plots. For the bandgap, these are the critical checks:
+
+**`plots/vref_vs_temperature.png`** — Does it show the classic bandgap bow? The curve should be flat in the middle (20-40°C) and rise gently at the extremes (-40°C and 125°C). If it's monotonically increasing or decreasing, the PTAT/CTAT ratio is wrong. If it's a straight line at exactly 1.2V, the simulation isn't sweeping temperature correctly.
+
+**`plots/vref_vs_supply.png`** — V_REF should be nearly flat as VDD varies from 1.62V to 1.98V. If it tracks VDD, there's no regulation. A good bandgap shows < 5 mV change over 360 mV of supply variation.
+
+**`plots/startup_transient.png`** — V_REF must ramp up from 0V and settle to ~1.2V. If it stays at 0V, the circuit is stuck in the degenerate state (startup circuit isn't working). If it oscillates, there's a stability issue. The settling should be clean and monotonic.
+
+**`plots/pvt_corners.png`** — All 5 process corner curves overlaid. They should all show the bow shape but shifted vertically. If one corner (e.g., SS) gives a drastically different V_REF, the design is not robust. FF and SS should bracket TT.
+
+**System-level check:** "Will this V_REF be stable enough for the 12-bit ADC downstream? At 12 bits over 1.8V, 1 LSB = 0.44 mV. If V_REF drifts by 10 mV over temperature, that's 23 LSBs of gain error in the ADC." Report this number in the README.
+
+When a plot passes and makes physical sense, embed it in README.md with a one-sentence analysis. When something looks wrong, show the plot anyway, annotate the anomaly, and explain what you'll try next.

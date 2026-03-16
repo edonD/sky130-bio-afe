@@ -106,3 +106,48 @@ Choose: full SPICE (connect all subcircuits), behavioral model calibrated to ups
 ## README.md — Your Final Deliverable
 
 Must contain: status, spec table, all plots (especially ECG/EEG acquisition), signal chain analysis, noise budget breakdown, power budget, PVT results, design rationale for gain partitioning, known limitations, experiment history.
+
+## The Experiment Loop
+
+LOOP FOREVER:
+
+1. **Think.** Does the full chain work? Where does the signal clip? Where does the noise come from? Which spec is failing?
+2. **Modify.** Change `evaluate.py` (simulation strategy, behavioral model, gain settings).
+3. **Commit.** `git add -A && git commit -m 'integration: <what you changed>'`
+4. **Run.** `python evaluate.py > run.log 2>&1`
+5. **Read results.** `grep "score\|PASS\|FAIL\|Error" run.log | head -20`
+6. **Study the plots.** See "Plot Analysis" below. Mandatory. The ECG acquisition plot is THE key deliverable.
+7. **Log.** Append to `results.tsv`.
+8. **Keep or discard.**
+   - Score improved AND ECG is clearly visible in reconstructed output → **keep**. Update README. Push.
+   - Score improved BUT ECG is distorted or noise-buried → **investigate**. Trace the signal stage by stage.
+   - Score equal or worse → `git reset --hard HEAD~1`.
+9. **Repeat.** Never stop.
+
+Phase B: PVT system validation (TB8), EEG acquisition (TB6), dynamic range sweep (TB9). Keep looping.
+
+## Logging
+
+`results.tsv` — tab-separated, NOT committed:
+
+```
+step	commit	score	specs_met	description
+0	a1b2c3d	0.40	2/5	initial chain — PGA saturates at gain=128 with ECG
+1	b2c3d4e	0.60	3/5	gain partition: InAmp=50x PGA=8x — no saturation
+2	c3d4e5f	0.80	4/5	system noise 1.3 µVrms (need <1.0) — InAmp dominated
+3	d4e5f6g	1.00	5/5	recalculated with measured InAmp noise — 0.9 µVrms
+```
+
+## Plot Analysis
+
+**`plots/ecg_acquisition.png`** — THE plot that proves the system works. Must show: (a) the raw 1 mV ECG + 300 mV offset + 60 Hz interference at the input, (b) the signal at each stage boundary (after InAmp, after PGA, after filter), and (c) the reconstructed digital output from ADC codes. The P-QRS-T morphology must be clearly recognizable in the final output. The 60 Hz should be gone. The DC offset should be removed by the filter. If the R-peak is clipped, the gain is too high. If the P-wave is missing, the filter's f_low is too high.
+
+**`plots/system_noise.png`** — Input-referred noise spectral density of the full chain, plus cumulative RMS. Must show which block dominates. The InAmp should contribute ~80% of total noise (it's the first stage — noise from later stages is divided by the InAmp gain). If the PGA or filter dominate, something is wrong with the gain partitioning. Annotate: "InAmp: X µVrms, PGA: Y µVrms referred to input, Filter: Z µVrms referred to input, Total RSS: W µVrms."
+
+**`plots/power_breakdown.png`** — Pie or bar chart. Bandgap counted at 1/4 (shared across 4 channels). Should total < 50 µW. Identify the dominant consumer.
+
+**`plots/dc_signal_chain.png`** — Voltage at each stage with a known DC input. Every node should be within 0.2–1.6V. If any node is near VDD or VSS, that stage is saturating.
+
+**`plots/eeg_acquisition.png`** — 50 µV alpha rhythm at 10 Hz, total gain 6400x. The 10 Hz oscillation should be visible in the ADC output. If it's buried in noise, the system noise floor is too high for EEG. This is the hard test.
+
+**System-level verdict:** "Can this system acquire a clinical-quality ECG from skin electrodes with 300 mV offset and powerline interference?" The README must answer this question with evidence from the plots, not just a number.

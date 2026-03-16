@@ -1,0 +1,37 @@
+{
+  "name": "SKY130 Bio-AFE System Integration",
+  "description": "Full 4-channel biomedical acquisition system: bandgap + inamp + PGA + filter + ADC integrated and validated end-to-end",
+  "supply_v": 1.8,
+  "measurements": {
+    "system_noise_uvrms": {
+      "target": "<1.0",
+      "weight": 25,
+      "unit": "uVrms",
+      "description": "Total input-referred noise of full signal chain (InAmp + PGA + Filter + ADC) in 0.5-150 Hz"
+    },
+    "system_cmrr_db": {
+      "target": ">100",
+      "weight": 20,
+      "unit": "dB",
+      "description": "System CMRR at 60 Hz measured from electrode input to ADC output"
+    },
+    "ecg_snr_db": {
+      "target": ">40",
+      "weight": 20,
+      "unit": "dB",
+      "description": "SNR with 1 mV ECG signal at max appropriate gain setting"
+    },
+    "total_power_uw": {
+      "target": "<50",
+      "weight": 15,
+      "unit": "uW",
+      "description": "Total power per channel (bandgap shared, counted once)"
+    },
+    "adc_enob_system": {
+      "target": ">10",
+      "weight": 20,
+      "unit": "bits",
+      "description": "Effective resolution at system level (including analog chain noise)"
+    }
+  }
+}

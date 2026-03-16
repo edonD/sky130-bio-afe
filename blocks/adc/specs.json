@@ -1,0 +1,43 @@
+{
+  "name": "SKY130 12-bit SAR ADC",
+  "description": "12-bit successive approximation register ADC for biosignal digitization at 1 kSPS",
+  "supply_v": 1.8,
+  "measurements": {
+    "enob": {
+      "target": ">10",
+      "weight": 25,
+      "unit": "bits",
+      "description": "Effective number of bits (from SINAD at near-Nyquist input)"
+    },
+    "dnl_lsb": {
+      "target": "<1.0",
+      "weight": 20,
+      "unit": "LSB",
+      "description": "Worst-case differential nonlinearity (no missing codes)"
+    },
+    "inl_lsb": {
+      "target": "<2.0",
+      "weight": 15,
+      "unit": "LSB",
+      "description": "Worst-case integral nonlinearity"
+    },
+    "conversion_time_us": {
+      "target": "<500",
+      "weight": 10,
+      "unit": "us",
+      "description": "Time for one complete 12-bit conversion"
+    },
+    "power_uw": {
+      "target": "<10",
+      "weight": 15,
+      "unit": "uW",
+      "description": "Total power at 1 kSPS sampling rate"
+    },
+    "input_range_v": {
+      "target": ">1.5",
+      "weight": 15,
+      "unit": "V",
+      "description": "Usable input voltage range (ideally 0 to 1.8V)"
+    }
+  }
+}

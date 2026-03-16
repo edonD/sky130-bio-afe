@@ -1,0 +1,43 @@
+{
+  "name": "SKY130 Bandpass Filter",
+  "description": "2nd-order Gm-C or switched-capacitor bandpass filter (0.5 Hz to 150 Hz) for ECG signal conditioning",
+  "supply_v": 1.8,
+  "measurements": {
+    "f_low_hz": {
+      "target": "<1.0",
+      "weight": 20,
+      "unit": "Hz",
+      "description": "Lower -3 dB cutoff frequency (high-pass, removes electrode DC offset)"
+    },
+    "f_high_hz": {
+      "target": "130 to 170",
+      "weight": 20,
+      "unit": "Hz",
+      "description": "Upper -3 dB cutoff frequency (low-pass, anti-alias for ADC)"
+    },
+    "passband_ripple_db": {
+      "target": "<1",
+      "weight": 15,
+      "unit": "dB",
+      "description": "Maximum gain variation within the 0.5-150 Hz passband"
+    },
+    "stopband_atten_250hz_db": {
+      "target": ">20",
+      "weight": 15,
+      "unit": "dB",
+      "description": "Attenuation at 250 Hz (Nyquist for 500 SPS ADC mode)"
+    },
+    "output_noise_uvrms": {
+      "target": "<100",
+      "weight": 15,
+      "unit": "uVrms",
+      "description": "Output-referred noise in the passband"
+    },
+    "power_uw": {
+      "target": "<10",
+      "weight": 15,
+      "unit": "uW",
+      "description": "Total power consumption"
+    }
+  }
+}

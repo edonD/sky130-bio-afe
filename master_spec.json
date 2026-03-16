@@ -1,0 +1,65 @@
+{
+  "project": "SKY130 Biomedical Analog Front-End",
+  "description": "4-channel ECG/EEG/EMG acquisition IC with integrated signal conditioning and ADC",
+  "technology": "SkyWater SKY130 130nm CMOS",
+  "supply_v": 1.8,
+  "target_application": "Wearable biosignal monitoring",
+
+  "blocks": {
+    "bandgap": {
+      "path": "blocks/bandgap",
+      "parallel": true,
+      "depends_on": [],
+      "description": "Bandgap voltage reference and bias current generator"
+    },
+    "inamp": {
+      "path": "blocks/inamp",
+      "parallel": true,
+      "depends_on": [],
+      "description": "Chopper-stabilized instrumentation amplifier"
+    },
+    "pga": {
+      "path": "blocks/pga",
+      "parallel": true,
+      "depends_on": [],
+      "description": "Programmable gain amplifier (1x-128x)"
+    },
+    "filter": {
+      "path": "blocks/filter",
+      "parallel": true,
+      "depends_on": [],
+      "description": "Bandpass filter (0.5 Hz - 150 Hz for ECG)"
+    },
+    "adc": {
+      "path": "blocks/adc",
+      "parallel": true,
+      "depends_on": [],
+      "description": "12-bit SAR ADC with 1 kSPS sampling"
+    },
+    "integration": {
+      "path": "blocks/integration",
+      "parallel": false,
+      "depends_on": ["bandgap", "inamp", "pga", "filter", "adc"],
+      "description": "Full 4-channel system integration and validation"
+    }
+  },
+
+  "system_specs": {
+    "input_referred_noise_uvrms": {"target": "<1.0", "description": "Total input-referred noise in 0.5-150 Hz band"},
+    "cmrr_db": {"target": ">100", "description": "Common-mode rejection ratio at 50/60 Hz"},
+    "total_gain_range_db": {"target": "0 to 80", "description": "Programmable gain range"},
+    "bandwidth_hz": {"target": "0.5 to 150", "description": "Signal bandwidth (ECG mode)"},
+    "adc_resolution_bits": {"target": ">=12", "description": "ADC effective resolution"},
+    "power_per_channel_uw": {"target": "<50", "description": "Total power per acquisition channel"},
+    "supply_voltage_v": {"target": "1.8", "description": "Single supply operation"},
+    "channels": {"target": "4", "description": "Number of independent acquisition channels"}
+  },
+
+  "signal_chain": [
+    "Electrode pair (differential) -> Instrumentation Amplifier (10x-100x, chopper)",
+    "-> Programmable Gain Amplifier (1x-128x)",
+    "-> Bandpass Filter (0.5 Hz - 150 Hz, 2nd order)",
+    "-> 12-bit SAR ADC (1 kSPS per channel)",
+    "-> SPI digital output"
+  ]
+}

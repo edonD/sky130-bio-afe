@@ -1,0 +1,43 @@
+{
+  "name": "SKY130 Chopper Instrumentation Amplifier",
+  "description": "Low-noise, high-CMRR instrumentation amplifier for biosignal acquisition. First stage of the analog signal chain.",
+  "supply_v": 1.8,
+  "measurements": {
+    "gain_db": {
+      "target": ">34",
+      "weight": 15,
+      "unit": "dB",
+      "description": "Closed-loop voltage gain (target ~50 V/V = 34 dB nominal)"
+    },
+    "input_referred_noise_uvrms": {
+      "target": "<1.5",
+      "weight": 25,
+      "unit": "uVrms",
+      "description": "Input-referred noise integrated over 0.5 Hz to 150 Hz"
+    },
+    "cmrr_60hz_db": {
+      "target": ">100",
+      "weight": 20,
+      "unit": "dB",
+      "description": "Common-mode rejection ratio at 60 Hz (powerline interference)"
+    },
+    "input_offset_uv": {
+      "target": "<50",
+      "weight": 15,
+      "unit": "uV",
+      "description": "Systematic input-referred DC offset (before chopping residual)"
+    },
+    "bandwidth_hz": {
+      "target": ">10000",
+      "weight": 10,
+      "unit": "Hz",
+      "description": "-3 dB bandwidth (must pass ECG/EEG/EMG signals without attenuation)"
+    },
+    "power_uw": {
+      "target": "<15",
+      "weight": 15,
+      "unit": "uW",
+      "description": "Total power consumption from 1.8V supply"
+    }
+  }
+}

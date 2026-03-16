@@ -1,0 +1,43 @@
+{
+  "name": "SKY130 Bandgap Voltage Reference",
+  "description": "CMOS bandgap reference providing stable voltage and bias currents for the bio-AFE signal chain",
+  "supply_v": 1.8,
+  "measurements": {
+    "vref_v": {
+      "target": "1.15 to 1.25",
+      "weight": 20,
+      "unit": "V",
+      "description": "Output reference voltage at nominal conditions (TT, 27C, 1.8V)"
+    },
+    "tc_ppm_c": {
+      "target": "<50",
+      "weight": 25,
+      "unit": "ppm/C",
+      "description": "Temperature coefficient of V_REF from -40C to 125C"
+    },
+    "psrr_dc_db": {
+      "target": ">60",
+      "weight": 20,
+      "unit": "dB",
+      "description": "Power supply rejection ratio at DC (V_REF variation / VDD variation)"
+    },
+    "line_regulation_mv_v": {
+      "target": "<5",
+      "weight": 10,
+      "unit": "mV/V",
+      "description": "V_REF change per volt of supply change (1.62V to 1.98V)"
+    },
+    "power_uw": {
+      "target": "<20",
+      "weight": 15,
+      "unit": "uW",
+      "description": "Total quiescent power consumption"
+    },
+    "startup_time_us": {
+      "target": "<100",
+      "weight": 10,
+      "unit": "us",
+      "description": "Time from power-on to V_REF within 1% of final value"
+    }
+  }
+}

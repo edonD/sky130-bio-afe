@@ -1,0 +1,49 @@
+{
+  "name": "SKY130 Programmable Gain Amplifier",
+  "description": "Digitally-programmable gain amplifier (1x to 128x) for biosignal conditioning",
+  "supply_v": 1.8,
+  "measurements": {
+    "gain_settings": {
+      "target": ">=7",
+      "weight": 15,
+      "unit": "settings",
+      "description": "Number of discrete gain steps (target: 1, 2, 4, 8, 16, 32, 64, 128)"
+    },
+    "gain_error_pct": {
+      "target": "<1",
+      "weight": 20,
+      "unit": "%",
+      "description": "Gain error at each setting (measured vs ideal ratio)"
+    },
+    "bandwidth_hz": {
+      "target": ">10000",
+      "weight": 15,
+      "unit": "Hz",
+      "description": "-3 dB bandwidth at maximum gain (128x)"
+    },
+    "output_noise_uvrms": {
+      "target": "<50",
+      "weight": 15,
+      "unit": "uVrms",
+      "description": "Output-referred noise in 0.5-150 Hz at gain=1"
+    },
+    "thd_pct": {
+      "target": "<0.1",
+      "weight": 15,
+      "unit": "%",
+      "description": "Total harmonic distortion at 10 Hz, 1 Vpp output"
+    },
+    "power_uw": {
+      "target": "<10",
+      "weight": 10,
+      "unit": "uW",
+      "description": "Total power consumption"
+    },
+    "settling_time_us": {
+      "target": "<100",
+      "weight": 10,
+      "unit": "us",
+      "description": "Time to settle within 0.1% after gain change"
+    }
+  }
+}

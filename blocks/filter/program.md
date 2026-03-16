@@ -1,74 +1,82 @@
-# Bandpass Filter — Design Program
+# Bandpass Filter
 
-## What This Block Does
+## Purpose
 
-Implements a bandpass filter with passband 0.5 Hz to 150 Hz. The high-pass removes electrode DC offset and motion artifacts. The low-pass acts as an anti-aliasing filter for the ADC.
+Bandpass filter with passband 0.5 Hz to 150 Hz. The high-pass removes electrode DC offset and motion artifacts. The low-pass anti-aliases for the ADC. The 0.5 Hz high-pass is the main design challenge — it requires either GΩ pseudo-resistors or very low transconductance.
 
-## System Context
+## Files
 
-The filter sits between the PGA output and the ADC input. It must:
-- Remove the DC component (electrode offset passed through from InAmp)
-- Reject out-of-band noise to prevent aliasing in the ADC
-- Add minimal noise of its own
-- Present a low-impedance output to drive the ADC sampling capacitor
+| File | Editable? | Purpose |
+|------|-----------|---------|
+| `specs.json` | **NO** | Pass/fail targets. Never modify. |
+| `program.md` | **NO** | This file. |
+| `design.cir` | YES | Your SPICE netlist. |
+| `parameters.csv` | YES | Parameter ranges for optimizer. |
+| `evaluate.py` | YES | Simulation runner and scoring. |
+| `best_parameters.csv` | YES | Current best values. |
+| `measurements.json` | YES | Output measurements. |
+| `README.md` | YES | **Your final deliverable.** |
+| `plots/` | YES | All generated plots. |
 
-The 0.5 Hz high-pass corner is critical — it must be low enough to pass the ECG P-wave (which has energy down to ~0.5 Hz) without distortion. The 150 Hz low-pass is set by the ECG diagnostic bandwidth standard.
+**You CANNOT modify:** `specs.json`, `program.md`, SKY130 PDK model files.
 
-## Challenge: Very Low Frequencies
+**Critical rule:** Never game the process by editing PDK models or fabricating results.
 
-The 0.5 Hz high-pass is the main design challenge. In a continuous-time Gm-C filter, this requires either:
-- Very large capacitors (hundreds of pF to nF)
-- Very low transconductance (nA/V range, using subthreshold MOSFETs)
-- Pseudo-resistors (subthreshold MOSFET resistors in the GΩ range)
+## Evaluated Parameters
 
-In a switched-capacitor filter, the clock frequency must be much higher than the signal band (e.g., 10 kHz clock for 150 Hz bandwidth).
+| Parameter | Target | Weight | What It Means |
+|-----------|--------|--------|---------------|
+| `f_low_hz` | < 1.0 Hz | 20 | Lower -3 dB cutoff (high-pass) |
+| `f_high_hz` | 130–170 Hz | 20 | Upper -3 dB cutoff (low-pass) |
+| `passband_ripple_db` | < 1 dB | 15 | Max gain variation in 0.5–150 Hz |
+| `stopband_atten_250hz_db` | > 20 dB | 15 | Attenuation at Nyquist |
+| `output_noise_uvrms` | < 100 µVrms | 15 | Output noise in passband |
+| `power_uw` | < 10 µW | 15 | Total power |
 
-## Evaluation Criteria
+## Testbenches
 
 ### TB1: Frequency Response
-- AC sweep from 0.01 Hz to 100 kHz
-- Measure gain vs frequency
-- Extract -3 dB corners (f_low, f_high)
-- **Pass:** f_low < 1.0 Hz, f_high between 130 and 170 Hz, passband ripple < 1 dB
+- AC sweep 0.01 Hz to 100 kHz. Extract f_low, f_high, passband ripple.
+- **Pass:** f_low < 1.0 Hz, f_high in 130–170 Hz, ripple < 1 dB.
 - **Plot:** `plots/frequency_response.png` (Bode plot, log frequency axis)
 
 ### TB2: Stopband Attenuation
-- Measure gain at 250 Hz, 500 Hz, 1 kHz
-- **Pass:** Attenuation > 20 dB at 250 Hz
-- **Plot:** Same as TB1 with attenuation markers annotated
+- Measure gain at 250 Hz, 500 Hz, 1 kHz.
+- **Pass:** > 20 dB at 250 Hz.
+- Annotate attenuation markers on the Bode plot.
 
-### TB3: Step Response (DC Offset Rejection)
-- Apply a 300 mV DC step (simulating electrode placement)
-- Verify output settles back to baseline
-- Measure settling time
-- **Pass:** Output returns within 10 mV of baseline within 5 seconds
-- **Plot:** `plots/step_response.png` (show the high-pass transient recovery)
+### TB3: Step Response (DC Rejection)
+- Apply 300 mV DC step (simulating electrode placement). Monitor output.
+- **Pass:** Output returns within 10 mV of baseline within 5 seconds.
+- **Plot:** `plots/step_response.png` — this proves the high-pass actually rejects DC.
 
-### TB4: Transient with ECG Signal
-- Apply synthetic ECG + 60 Hz interference at the input
-- Verify ECG shape preserved, 60 Hz attenuated
-- **Pass:** ECG R-peak amplitude within ±5% of expected
+### TB4: ECG Transient
+- Synthetic ECG + 60 Hz interference at input.
+- **Pass:** ECG R-peak within ±5% of expected amplitude.
 - **Plot:** `plots/ecg_filtering.png` (input vs output overlay)
 
 ### TB5: Noise
-- Noise analysis, integrate in passband
-- **Pass:** Output noise < 100 µVrms
+- Noise analysis, integrate in passband.
+- **Pass:** < 100 µVrms.
 - **Plot:** `plots/noise_spectrum.png`
 
-### TB6: PVT Corner Analysis
-- Run TB1 across corners: verify f_low and f_high stay within spec
-- **Pass:** Cutoff frequencies within 2x of nominal at all corners
-- **Plot:** `plots/pvt_frequency_response.png`
+### TB6: PVT + Monte Carlo
+- TB1 across 5 corners × 3 temps. Cutoffs within 2x of nominal at all corners.
+- **Important:** If using pseudo-resistors, the high-pass corner WILL shift >5x across PVT. Document this honestly.
+- **Plots:** `plots/pvt_frequency_response.png`, `plots/monte_carlo.png`
 
-## Interface
+## How to Evaluate Honestly
 
-**Inputs:** `vin` (from PGA, centered at 0.9V), `vref` (1.2V from bandgap), `ibias` (1 µA)
-**Outputs:** `vout` (filtered signal, centered at 0.9V)
+- **The 0.5 Hz corner must be verified with a slow simulation** (AC starting at 0.01 Hz, or a transient step response). If the AC sweep starts at 1 Hz, you're not measuring f_low.
+- **A 2nd-order filter gives ~12 dB at 250 Hz** (1.7× the 150 Hz corner). If you need > 20 dB, you may need 3rd or 4th order. Be honest about this — don't claim 20 dB from a 2nd-order.
+- **Pseudo-resistor PVT variation** is the #1 known weakness. A 30 GΩ resistor at room temp might be 3 GΩ at 125°C (shifting f_low from 0.5 Hz to 5 Hz). Document the actual PVT spread.
+- **If the step response doesn't recover to baseline**, the DC is not being rejected — the high-pass isn't working.
+- **Passband ripple** in Chebyshev filters trades off with stopband attenuation. If you pick Butterworth, ripple is zero but rolloff is slower.
 
-## Design Constraints
+## Design Freedom
 
-- Single 1.8V supply
-- SKY130 1.8V devices, poly resistors, MIM capacitors
-- If using pseudo-resistors, the subthreshold MOSFET resistance will vary >10x over PVT — account for this
-- If using switched-capacitor, the clock generation is part of this block
-- Output must be able to drive 5 pF ADC sampling capacitor
+Choose: Gm-C, active-RC with pseudo-resistors, switched-capacitor, biquad, Sallen-Key, state-variable, any filter type (Butterworth, Chebyshev, Bessel). Any optimization method.
+
+## README.md — Your Final Deliverable
+
+Must contain: status, spec table, all plots with analysis, circuit description, rationale, tried/rejected, limitations (especially PVT sensitivity of the high-pass corner), experiment history.

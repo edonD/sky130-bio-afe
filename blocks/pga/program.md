@@ -1,61 +1,82 @@
-# Programmable Gain Amplifier — Design Program
+# Programmable Gain Amplifier
 
-## What This Block Does
+## Purpose
 
-Provides digitally-selectable voltage gain from 1x to 128x in binary steps (1, 2, 4, 8, 16, 32, 64, 128). Allows the system to adapt to different biosignal types (ECG: moderate gain, EEG: maximum gain) and electrode conditions.
+Provide digitally-selectable gain from 1x to 128x in binary steps (1, 2, 4, 8, 16, 32, 64, 128). Combined with the InAmp's fixed ~50x, the total system gain ranges from 50x to 6400x — mapping µV biosignals to the ADC's 0-1.8V input range.
 
-## System Context
+## Files
 
-The PGA sits between the instrumentation amplifier (fixed ~50x gain) and the bandpass filter. Together, the InAmp + PGA provide total gain from 50x to 6400x, mapping microvolt biosignals into the ADC's 0-1.8V input range.
+| File | Editable? | Purpose |
+|------|-----------|---------|
+| `specs.json` | **NO** | Pass/fail targets. Never modify. |
+| `program.md` | **NO** | This file. |
+| `design.cir` | YES | Your SPICE netlist. |
+| `parameters.csv` | YES | Parameter ranges for optimizer. |
+| `evaluate.py` | YES | Simulation runner and scoring. |
+| `best_parameters.csv` | YES | Current best values. |
+| `measurements.json` | YES | Output measurements. |
+| `README.md` | YES | **Your final deliverable.** |
+| `plots/` | YES | All generated plots. |
 
-At maximum total gain (6400x), a 100 µV EEG signal becomes 640 mV — well within the ADC's range. At minimum gain (50x), a 5 mV ECG signal becomes 250 mV.
+**You CANNOT modify:** `specs.json`, `program.md`, SKY130 PDK model files.
 
-## Evaluation Criteria
+**Critical rule:** Never game the process by editing PDK models or fabricating results.
+
+## Evaluated Parameters
+
+| Parameter | Target | Weight | What It Means |
+|-----------|--------|--------|---------------|
+| `gain_settings` | >= 7 | 15 | Number of discrete gain steps |
+| `gain_error_pct` | < 1% | 20 | Worst-case gain error across all settings |
+| `bandwidth_hz` | > 10 kHz | 15 | -3 dB BW at maximum gain (128x) |
+| `output_noise_uvrms` | < 50 µVrms | 15 | Output noise at gain=1, 0.5-150 Hz |
+| `thd_pct` | < 0.1% | 15 | THD at 10 Hz, 1 Vpp output |
+| `power_uw` | < 10 µW | 10 | Total power |
+| `settling_time_us` | < 100 µs | 10 | Settling after gain change |
+
+## Testbenches
 
 ### TB1: Gain Accuracy at All Settings
-- Set each gain step (1, 2, 4, 8, 16, 32, 64, 128)
-- Apply 10 mV differential input at 10 Hz
-- Measure output amplitude, compute actual gain vs ideal
-- **Pass:** Gain error < 1% at every setting
-- **Plot:** `plots/gain_accuracy.png` (bar chart: ideal vs measured at each step)
+- Set each gain (1, 2, 4, 8, 16, 32, 64, 128). Apply 10 mV input at 10 Hz. Measure output.
+- **Pass:** Gain error < 1% at every setting.
+- **Plot:** `plots/gain_accuracy.png` (ideal vs measured at each step)
 
-### TB2: Frequency Response at Min/Max Gain
-- AC sweep 0.1 Hz to 1 MHz at gain=1 and gain=128
-- **Pass:** -3 dB bandwidth > 10 kHz at gain=128
-- **Plot:** `plots/ac_response.png` (overlay of all gain settings)
+### TB2: Frequency Response
+- AC sweep at gain=1 and gain=128.
+- **Pass:** BW > 10 kHz at gain=128.
+- **Plot:** `plots/ac_response.png` (overlay all gain settings)
 
 ### TB3: Noise
-- Noise simulation at gain=1 (worst case for input-referred)
-- Integrate from 0.5 Hz to 150 Hz
-- **Pass:** Output-referred noise < 50 µVrms at gain=1
+- Noise analysis at gain=1, integrate 0.5–150 Hz.
 - **Plot:** `plots/noise_spectrum.png`
 
 ### TB4: Linearity (THD)
-- Apply 10 Hz sine, amplitude set for 1 Vpp output, at gain=1 and gain=128
-- Measure THD from FFT of transient output
-- **Pass:** THD < 0.1%
+- 10 Hz sine, 1 Vpp output. FFT of transient.
+- **Pass:** THD < 0.1%.
 - **Plot:** `plots/thd_analysis.png`
 
 ### TB5: Gain Switching Transient
-- Switch gain from 1x to 128x during simulation
-- Measure settling time to 0.1% of final value
-- **Pass:** Settling time < 100 µs
+- Switch gain from 1x to 128x mid-simulation.
+- **Pass:** Settles within 0.1% in < 100 µs.
 - **Plot:** `plots/gain_switching.png`
 
-### TB6: PVT Corner Analysis
-- Run TB1 at all 5 corners × 3 temperatures
-- **Pass:** Gain error < 2% at ALL corners (relaxed from 1% nominal)
-- **Plot:** `plots/pvt_gain_accuracy.png`
+### TB6: PVT + Monte Carlo
+- TB1 across 5 corners × 3 temps. Gain error < 2% at all corners (relaxed).
+- 200 MC samples if available.
+- **Plots:** `plots/pvt_gain.png`, `plots/monte_carlo.png`
 
-## Interface
+## How to Evaluate Honestly
 
-**Inputs:** `vin` (from InAmp output, ~0.9V ± signal), `vref` (~1.2V from bandgap), `ibias` (~1 µA), `gain[2:0]` (3-bit digital gain select)
-**Outputs:** `vout` (amplified signal, centered at ~0.9V)
+- **Test ALL 8 gain settings**, not just one. A PGA that works at gain=1 but fails at gain=128 is broken.
+- **THD requires a proper FFT** of a transient simulation, not AC analysis.
+- **At gain=128 with 10 kHz BW**, the opamp needs GBW > 1.28 MHz. If BW is failing, the opamp is too slow.
+- **Input signals are centered at 0.9V** (from InAmp output), not ground-referenced. Test with realistic bias.
+- **If gain error > 5%**, the feedback network or topology is probably wrong, not just a sizing issue.
 
-## Design Constraints
+## Design Freedom
 
-- Single 1.8V supply
-- Gain selection via 3-bit digital input (CMOS logic levels)
-- Resistor-based or capacitor-based gain setting — agent's choice
-- Must not introduce significant DC offset (< 5 mV output offset)
-- SKY130 1.8V devices, poly resistors, MIM capacitors available
+Choose: resistive feedback, capacitive feedback, T-network, R-2R, current steering, any opamp topology. Any optimization method.
+
+## README.md — Your Final Deliverable
+
+Must contain: status, spec table, all plots with analysis, circuit description, rationale, tried/rejected, limitations, experiment history.

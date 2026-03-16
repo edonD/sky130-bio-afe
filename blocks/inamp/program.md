@@ -1,84 +1,99 @@
-# Instrumentation Amplifier — Design Program
+# Instrumentation Amplifier
 
-## What This Block Does
+## Purpose
 
-Amplifies the microvolt-level differential voltage between two body electrodes while rejecting the common-mode signal (powerline interference, DC electrode offset). This is the most critical block in the signal chain — it sets the noise floor for the entire system.
+Amplify microvolt-level differential biosignals (ECG/EEG/EMG) while rejecting common-mode interference. This is the most critical block — it sets the noise floor for the entire system. Biosignals arrive as 1 µV to 5 mV differential, riding on 300 mV DC electrode offset and 1-10 mV 50/60 Hz powerline noise.
 
-## System Context
+## Files
 
-Biosignals arrive as tiny differential voltages (1 µV to 5 mV) riding on top of large common-mode interference (300 mV DC electrode offset + 1-10 mV 50/60 Hz powerline). The instrumentation amplifier must:
-- Amplify the differential signal by ~50 V/V (34 dB)
-- Reject common-mode by >100 dB
-- Add less than 1.5 µVrms of noise in the signal band
-- Tolerate up to ±300 mV input DC offset without saturating
+| File | Editable? | Purpose |
+|------|-----------|---------|
+| `specs.json` | **NO** | Pass/fail targets. Never modify. |
+| `program.md` | **NO** | This file. |
+| `design.cir` | YES | Your SPICE netlist. |
+| `parameters.csv` | YES | Parameter ranges for optimizer. |
+| `evaluate.py` | YES | Simulation runner and scoring. |
+| `best_parameters.csv` | YES | Current best values. |
+| `measurements.json` | YES | Output measurements. |
+| `README.md` | YES | **Your final deliverable.** |
+| `plots/` | YES | All generated plots. |
 
-The output feeds the PGA, which expects a signal centered at ~0.9V with ±0.7V swing range.
+**You CANNOT modify:** `specs.json`, `program.md`, SKY130 PDK model files, `../../interfaces.md`.
 
-## Evaluation Criteria
+**Critical rule:** Never game the process by editing PDK models, fabricating results, or tweaking evaluation to pass artificially.
 
-### TB1: DC Operating Point and Gain
-- Apply a small differential input (1 mV) with V_CM = 0.9V
-- Measure output voltage and compute gain
-- Verify output stays within 0.2V–1.6V rail
-- **Pass:** Gain > 34 dB (50 V/V), output centered near 0.9V
+## Evaluated Parameters
+
+| Parameter | Target | Weight | What It Means |
+|-----------|--------|--------|---------------|
+| `gain_db` | > 34 dB | 15 | Closed-loop voltage gain (~50 V/V) |
+| `input_referred_noise_uvrms` | < 1.5 µVrms | 25 | Total noise in 0.5–150 Hz band |
+| `cmrr_60hz_db` | > 100 dB | 20 | Common-mode rejection at powerline frequency |
+| `input_offset_uv` | < 50 µV | 15 | Systematic DC offset (referred to input) |
+| `bandwidth_hz` | > 10 kHz | 10 | -3 dB bandwidth |
+| `power_uw` | < 15 µW | 15 | Total power from 1.8V supply |
+
+## Testbenches
+
+### TB1: DC Gain and Operating Point
+- Apply 1 mV differential, V_CM = 0.9V. Measure output, compute gain.
+- Verify output stays within 0.2–1.6V (not railed).
 - **Plot:** `plots/dc_gain.png`
 
 ### TB2: AC Frequency Response
-- AC sweep from 0.1 Hz to 1 MHz (differential input)
-- Measure gain magnitude and phase vs frequency
-- **Pass:** -3 dB bandwidth > 10 kHz, gain flat (±0.5 dB) from 0.5 to 150 Hz
-- **Plot:** `plots/ac_response.png` (Bode plot)
+- AC sweep 0.1 Hz to 1 MHz, differential input. Bode plot.
+- **Pass:** Flat (±0.5 dB) from 0.5 to 150 Hz, BW > 10 kHz.
+- **Plot:** `plots/ac_response.png`
 
 ### TB3: Common-Mode Rejection
-- Apply 10 mV common-mode signal, sweep frequency 1 Hz to 1 kHz
-- Measure output amplitude, compute CMRR = 20·log10(A_diff/A_cm)
-- **Pass:** CMRR > 100 dB at 60 Hz
+- Apply 10 mV common-mode, sweep 1 Hz to 1 kHz. Compute CMRR = A_diff/A_cm.
+- **Pass:** CMRR > 100 dB at 60 Hz.
 - **Plot:** `plots/cmrr_vs_freq.png`
 
 ### TB4: Input-Referred Noise
-- Run noise analysis from 0.1 Hz to 1 kHz
-- Integrate noise spectral density from 0.5 Hz to 150 Hz to get total RMS noise
-- **Pass:** Input-referred noise < 1.5 µVrms
-- **Plot:** `plots/noise_spectral_density.png` (V/√Hz vs frequency)
+- Noise analysis 0.1 Hz to 1 kHz. Integrate 0.5–150 Hz for total RMS.
+- **Pass:** < 1.5 µVrms input-referred.
+- **Plot:** `plots/noise_spectral_density.png` (V/√Hz vs frequency — should show 1/f corner and white noise floor)
 
 ### TB5: Input Offset
-- Measure output with zero differential input, extract input-referred offset
-- If chopping is used, verify residual offset after chopping
-- **Pass:** Input-referred offset < 50 µV
+- Zero differential input. Measure output, compute input-referred offset.
 - **Plot:** `plots/offset_measurement.png`
 
-### TB6: Large Signal / Electrode Offset Tolerance
-- Apply ±300 mV DC offset on both inputs (common-mode)
-- Simultaneously apply 1 mV differential signal
-- Verify the amplifier still functions (gain, linearity)
-- **Pass:** Gain within ±1 dB of nominal with 300 mV CM offset
+### TB6: Electrode Offset Tolerance
+- Apply ±300 mV DC common-mode offset + 1 mV differential signal.
+- **Pass:** Gain within ±1 dB of nominal. Output not saturated.
 - **Plot:** `plots/electrode_offset_tolerance.png`
 
-### TB7: Transient with Realistic ECG
-- Apply a synthetic ECG waveform (R-peak ~1 mV, 1 Hz rate) plus 60 Hz interference
-- Verify clean amplified output
-- **Pass:** ECG morphology preserved, 60 Hz rejected
+### TB7: Realistic ECG Transient
+- Synthetic ECG (1 mV R-peak, 72 BPM) + 2 mV 60 Hz interference + 300 mV DC offset.
+- **Pass:** ECG morphology preserved at output, 60 Hz rejected.
 - **Plot:** `plots/ecg_transient.png`
 
 ### TB8: PVT Corner Analysis
-- Run TB1 + TB4 across 5 corners × 3 temperatures = 15 combinations minimum
-- **Pass:** All specs met at ALL corners
+- TB1 + TB4 across 5 corners × 3 temps = 15 minimum.
+- **Pass:** All specs met at all corners.
 - **Plot:** `plots/pvt_summary.png`
 
-## Interface
+### TB9: Monte Carlo
+- 200 samples if mismatch models available. Report offset and gain spread.
+- **Plot:** `plots/monte_carlo.png`
 
-**Inputs:** `inp` (positive electrode), `inn` (negative electrode), `vref` (from bandgap, ~1.2V), `ibias` (from bandgap, ~1 µA)
-**Outputs:** `vout` (amplified signal, centered at ~0.9V)
-**Common-mode input range:** 0.5V to 1.3V (with ±300 mV electrode offset from 0.9V midpoint)
+## How to Evaluate Honestly
 
-## Design Constraints
+- **Noise:** Must be integrated over 0.5–150 Hz, not spot noise at one frequency. If you get < 0.1 µVrms, check the simulation — that's world-class for µA bias.
+- **CMRR:** > 80 dB needs chopping or very careful matching. > 120 dB is exceptional — verify it's real.
+- **Electrode offset:** This is where designs fail in the real world. Test with ±300 mV, not 0V.
+- **If the output is railed (stuck at VDD or VSS):** The common-mode input range doesn't cover the electrode offset. Rethink the input stage.
+- **If noise is too high:** Increase bias current (noise ∝ 1/√I) or increase input transistor W/L.
+- **If CMRR is too low:** Check tail current source impedance, consider chopping, verify symmetry.
 
-- Single 1.8V supply — no negative rail available
-- Must handle rail-to-rail input common-mode is NOT required, but ±300 mV around mid-supply is
-- Chopping is recommended for offset and 1/f noise reduction, but not mandated
-- SKY130 1.8V core devices only (pfet_01v8, nfet_01v8)
-- Feedback resistors: use poly resistors (sky130_fd_pr__res_*) or MOSFET-based
+## Design Freedom
 
-## Parameters
+Choose everything:
+- **Topology:** 3-opamp, current-feedback, capacitively-coupled, direct differential pair, etc.
+- **Techniques:** Chopping, auto-zeroing, correlated double sampling — all fair game.
+- **Optimization:** Any algorithm. `pip install` anything.
 
-Define transistor W/L values, bias currents, chopping frequency (if used), and feedback resistor values in `parameters.csv`.
+## README.md — Your Final Deliverable
+
+The only thing I check. Must contain: status banner, spec table, all plots with analysis, circuit description, design rationale, what was tried/rejected, known limitations, experiment history.

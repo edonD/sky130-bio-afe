@@ -1,103 +1,108 @@
-# System Integration — Design Program
+# System Integration
 
-## What This Block Does
+## Purpose
 
-Connects all upstream blocks (bandgap, instrumentation amplifier, PGA, bandpass filter, ADC) into a complete single-channel biosignal acquisition path, then validates the full signal chain end-to-end. Also models the 4-channel system (shared bandgap, 4 independent analog chains).
-
-## System Context
-
-This is the final validation stage. Individual blocks have been designed and characterized in isolation. Integration must verify that:
-1. Interface voltages are compatible (no saturation at block boundaries)
-2. Noise from all blocks combines correctly (RSS of uncorrelated sources)
-3. The full signal chain can acquire a real ECG/EEG/EMG signal
-4. Total power budget is met
-5. PVT robustness holds at the system level
-
-## Evaluation Criteria
-
-### TB1: DC Signal Chain Verification
-- Connect bandgap → inamp → PGA → filter → ADC in SPICE
-- Apply a known DC differential input to the InAmp
-- Verify the signal propagates through each stage with correct gain
-- Check voltage levels at each node stay within 0.2V–1.6V (linear region)
-- **Pass:** End-to-end gain within ±5% of expected (InAmp gain × PGA gain)
-- **Plot:** `plots/dc_signal_chain.png` (voltage at each node)
-
-### TB2: Full-Chain Frequency Response
-- AC analysis from 0.01 Hz to 1 MHz through the entire chain
-- **Pass:** Passband matches 0.5–150 Hz, total gain matches InAmp × PGA setting
-- **Plot:** `plots/system_frequency_response.png`
-
-### TB3: System Noise
-- Noise simulation of full chain (InAmp → PGA → Filter → ADC)
-- Integrate input-referred noise from 0.5 to 150 Hz
-- **Pass:** Total input-referred noise < 1.0 µVrms
-- Compare to RSS of individual block contributions
-- **Plot:** `plots/system_noise.png` (spectral density + cumulative RMS)
-
-### TB4: System CMRR
-- Apply 10 mV common-mode at 60 Hz to InAmp inputs
-- Measure signal at ADC output (digital codes)
-- Compute system CMRR
-- **Pass:** CMRR > 100 dB at 60 Hz
-- **Plot:** `plots/system_cmrr.png`
-
-### TB5: ECG Acquisition
-- Apply realistic synthetic ECG waveform (1 mV amplitude, 72 BPM, with P-QRS-T morphology)
-- Add 300 mV electrode DC offset + 2 mV 60 Hz interference + baseline wander
-- Set gains: InAmp=50x, PGA=8x (total 400x → 400 mV signal at ADC)
-- Run transient for 5 seconds, digitize with ADC model
-- Reconstruct signal from ADC codes
-- **Pass:** R-peaks clearly visible, SNR > 40 dB, 60 Hz interference rejected
-- **Plot:** `plots/ecg_acquisition.png` (input signal, output at each stage, reconstructed digital)
-
-### TB6: EEG Acquisition
-- Apply 50 µV EEG-like signal (alpha rhythm, 10 Hz)
-- Set gains: InAmp=50x, PGA=128x (total 6400x → 320 mV at ADC)
-- **Pass:** 10 Hz oscillation visible in ADC output, not buried in noise
-- **Plot:** `plots/eeg_acquisition.png`
-
-### TB7: Power Budget
-- Sum power from all blocks at nominal operation
-- **Pass:** Total < 50 µW per channel (bandgap shared across 4 channels, counted once at 1/4)
-- **Plot:** `plots/power_breakdown.png` (pie chart or bar chart)
-
-### TB8: PVT System Validation
-- Run TB5 (ECG acquisition) at worst-case corners (ss_-40C_1.62V, ff_125C_1.98V)
-- **Pass:** ECG still clearly acquired, SNR > 30 dB (relaxed)
-- **Plot:** `plots/pvt_ecg.png`
-
-### TB9: Dynamic Range
-- Sweep input signal from 1 µV to 10 mV (at optimal PGA setting for each level)
-- Compute SNR vs input level
-- **Pass:** Dynamic range > 60 dB
-- **Plot:** `plots/dynamic_range.png`
-
-## Approach
-
-Integration can use:
-1. **Full SPICE**: Connect all subcircuits, run transient. Accurate but slow.
-2. **Behavioral + SPICE**: Use measured transfer functions from upstream blocks, with small-scale SPICE for critical interfaces. Like the CIM project.
-3. **Mixed**: SPICE for TB1-TB4 (short simulations), behavioral for TB5-TB9 (long transients).
-
-The agent chooses the approach. What matters is that the results are physically credible.
-
-## Interface to Upstream Blocks
-
-Read `measurements.json` from each upstream block:
-- `../bandgap/measurements.json` → V_REF, TC, PSRR, power
-- `../inamp/measurements.json` → gain, noise, CMRR, offset, BW, power
-- `../pga/measurements.json` → gain accuracy, noise, THD, BW, power
-- `../filter/measurements.json` → cutoff frequencies, noise, power
-- `../adc/measurements.json` → ENOB, DNL, INL, power, conversion time
+Connect all upstream blocks (bandgap, InAmp, PGA, filter, ADC) into a complete biosignal acquisition channel. Validate end-to-end with realistic ECG and EEG signals. Prove the system works as a whole, not just block-by-block.
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `specs.json` | System-level specs (DO NOT MODIFY) |
-| `program.md` | This file |
-| `CLAUDE.md` | Agent instructions |
-| `evaluate.py` | System simulation and scoring |
-| `measurements.json` | Final system measurements |
-| `README.md` | System integration report |
+| File | Editable? | Purpose |
+|------|-----------|---------|
+| `specs.json` | **NO** | System-level pass/fail targets. Never modify. |
+| `program.md` | **NO** | This file. |
+| `evaluate.py` | YES | System simulation and scoring. |
+| `measurements.json` | YES | Output measurements. |
+| `README.md` | YES | **Your final deliverable.** |
+| `plots/` | YES | All generated plots. |
+| `upstream_config.json` | Read-only | Measurements from all upstream blocks (generated by orchestrate.py). |
+
+**You CANNOT modify:** `specs.json`, `program.md`, SKY130 PDK model files, upstream block files.
+
+**Critical rule:** Never fabricate results. If the system doesn't meet spec, report honestly which block is the bottleneck and why.
+
+## Upstream Measurements to Read
+
+Before starting, load measurements.json from each upstream block:
+- `../bandgap/measurements.json` — V_REF, TC, PSRR, power
+- `../inamp/measurements.json` — gain, noise, CMRR, offset, bandwidth, power
+- `../pga/measurements.json` — gain accuracy, noise, THD, bandwidth, power
+- `../filter/measurements.json` — cutoff frequencies, noise, power
+- `../adc/measurements.json` — ENOB, DNL, INL, conversion time, power
+
+## Evaluated Parameters
+
+| Parameter | Target | Weight | What It Means |
+|-----------|--------|--------|---------------|
+| `system_noise_uvrms` | < 1.0 µVrms | 25 | Input-referred noise of full chain, 0.5-150 Hz |
+| `system_cmrr_db` | > 100 dB | 20 | End-to-end CMRR at 60 Hz |
+| `ecg_snr_db` | > 40 dB | 20 | SNR with 1 mV ECG at appropriate gain |
+| `total_power_uw` | < 50 µW | 15 | Power per channel (bandgap shared, counted at 1/4) |
+| `adc_enob_system` | > 10 bits | 20 | Effective resolution at system level |
+
+## Testbenches
+
+### TB1: DC Signal Chain Verification
+- Connect bandgap → InAmp → PGA → filter → ADC in SPICE (or behavioral model calibrated to upstream measurements).
+- Apply known DC differential input. Check voltage at every node.
+- **Pass:** End-to-end gain within ±5% of expected. No stage saturated.
+- **Plot:** `plots/dc_signal_chain.png` (voltage at each stage boundary)
+
+### TB2: System Frequency Response
+- AC analysis through entire chain, 0.01 Hz to 1 MHz.
+- **Pass:** Passband 0.5–150 Hz, total gain = InAmp × PGA setting.
+- **Plot:** `plots/system_frequency_response.png`
+
+### TB3: System Noise
+- Noise simulation of full chain. Integrate input-referred noise 0.5–150 Hz.
+- Compare to RSS of individual blocks: noise_total² ≈ noise_inamp² + (noise_pga/gain_inamp)² + ...
+- **Pass:** Total < 1.0 µVrms. Dominated by InAmp (if not, gains are wrong).
+- **Plot:** `plots/system_noise.png` (spectral density + cumulative RMS + per-block contribution breakdown)
+
+### TB4: System CMRR
+- 10 mV common-mode at 60 Hz on InAmp inputs. Measure at ADC output.
+- **Pass:** CMRR > 100 dB.
+- **Plot:** `plots/system_cmrr.png`
+
+### TB5: ECG Acquisition (THE KEY TEST)
+- Apply: 1 mV ECG (72 BPM, P-QRS-T morphology) + 300 mV electrode DC offset + 2 mV 60 Hz + baseline wander.
+- Set gains: InAmp=50x, PGA=8x (total 400x → 400 mV at ADC).
+- Run 5 seconds transient. Digitize with ADC. Reconstruct from codes.
+- **Pass:** R-peaks visible, SNR > 40 dB, 60 Hz rejected, DC offset removed by filter.
+- **Plot:** `plots/ecg_acquisition.png` (show: raw input, signal at each stage, reconstructed digital output)
+
+### TB6: EEG Acquisition
+- 50 µV alpha rhythm (10 Hz). InAmp=50x, PGA=128x (total 6400x → 320 mV at ADC).
+- **Pass:** 10 Hz oscillation visible in ADC output.
+- **Plot:** `plots/eeg_acquisition.png`
+
+### TB7: Power Budget
+- Sum all blocks. Bandgap shared across 4 channels (count 1/4).
+- **Pass:** < 50 µW per channel.
+- **Plot:** `plots/power_breakdown.png`
+
+### TB8: PVT System Validation
+- TB5 at worst-case corners (ss/-40°C/1.62V and ff/125°C/1.98V).
+- **Pass:** ECG still visible, SNR > 30 dB (relaxed).
+- **Plot:** `plots/pvt_ecg.png`
+
+### TB9: Dynamic Range
+- Sweep input from 1 µV to 10 mV, optimal PGA setting per level.
+- **Pass:** Dynamic range > 60 dB.
+- **Plot:** `plots/dynamic_range.png`
+
+## How to Evaluate Honestly
+
+- **System noise should be dominated by InAmp** (first stage sets the noise floor). If PGA or filter dominate, the gain partitioning is wrong.
+- **CMRR should be close to InAmp CMRR.** Other stages add/subtract a few dB, not tens.
+- **Check voltage levels at every stage boundary.** If any stage saturates with a realistic signal, the gain chain is broken.
+- **The ECG test must include the 300 mV electrode offset.** Without it, you're not testing reality.
+- **Power estimate:** bandgap/4 + inamp + pga + filter + adc ≈ 5 + 15 + 10 + 10 + 10 = ~50 µW. If it's 200 µW, something is wrong.
+- **A 1 mV ECG at 400x gain = 400 mV at ADC.** With 12-bit ADC (0.44 mV/LSB), that's ~900 codes of swing. Expected SNR: 40-50 dB.
+
+## Design Freedom
+
+Choose: full SPICE (connect all subcircuits), behavioral model calibrated to upstream measurements, or mixed. Any Python packages for signal generation and analysis.
+
+## README.md — Your Final Deliverable
+
+Must contain: status, spec table, all plots (especially ECG/EEG acquisition), signal chain analysis, noise budget breakdown, power budget, PVT results, design rationale for gain partitioning, known limitations, experiment history.

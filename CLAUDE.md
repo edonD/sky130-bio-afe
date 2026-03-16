@@ -12,7 +12,7 @@ To set up a new design run, work with the user to:
    - `master_spec.json` — system-level specs and block dependency graph
    - `interfaces.md` — signal contracts between blocks, biosignal characteristics, technology constants
    - `orchestrate.py` — build status and dependency management
-   - For the block you're about to work on: `specs.json`, `program.md`
+   - For the block you're about to work on: `program.md` (contains everything: specs, testbenches, evaluation rules, design freedom)
 4. **Verify SKY130 PDK**: Check that ngspice works and SKY130 models are accessible. Run `ngspice -b -r /dev/null -o /dev/null` to verify. If models are missing, tell the human.
 5. **Initialize results.tsv**: Create `results.tsv` in the block directory with just the header row.
 6. **Run `python orchestrate.py --launch`** to see which blocks are ready.
@@ -45,7 +45,7 @@ When you start a block, you need to create the working files that don't exist ye
 - `evaluate.py` — simulation runner that calls ngspice, parses results, scores against specs.json
 - `README.md` — design documentation (update after every keeper)
 
-Read `program.md` and `specs.json` to understand what testbenches to implement and what specs to meet. The agent has **full freedom** on circuit topology, optimization method, and design approach. The only constraint is `specs.json`.
+Read `program.md` — it contains everything: purpose, specs, testbenches, evaluation rules, design freedom, and what goes in README.md. The agent has **full freedom** on circuit topology, optimization method, and design approach. The only constraints are in `specs.json` (referenced by program.md).
 
 ## The Experiment Loop
 

@@ -503,25 +503,62 @@ def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,
 
 def sar_convert_batch(v_in_array, v_ref, n_bits, comp_offset=0.0,
                       comp_noise_rms=0.0, cap_weights=None):
-    """SAR conversion for an array of input voltages."""
-    codes = np.zeros(len(v_in_array), dtype=int)
-    for idx, v_in in enumerate(v_in_array):
-        codes[idx] = sar_convert(v_in, v_ref, n_bits, comp_offset,
-                                 comp_noise_rms, cap_weights)
-    return codes
+    """Vectorized SAR conversion for an array of input voltages."""
+    n = len(v_in_array)
+    v_in = np.asarray(v_in_array, dtype=np.float64)
+
+    if cap_weights is None:
+        # Fast path: ideal DAC, fully vectorized
+        codes = np.zeros(n, dtype=np.int32)
+        for i in range(n_bits - 1, -1, -1):
+            codes |= (1 << i)
+            v_dac = v_ref * codes / (2**n_bits)
+            if comp_noise_rms > 0:
+                noise = np.random.normal(0, comp_noise_rms, n)
+            else:
+                noise = 0
+            mask = v_in < (v_dac + comp_offset + noise)
+            codes[mask] &= ~(1 << i)
+        return codes
+    else:
+        # Mismatched DAC: vectorized over all inputs simultaneously
+        c_total = np.sum(cap_weights) + 1.0
+        # Precompute weight for each bit: cap_weights[i] / c_total * v_ref
+        bit_weights = cap_weights / c_total * v_ref
+
+        bits = np.zeros((n_bits, n), dtype=np.int32)
+        for i in range(n_bits - 1, -1, -1):
+            bits[i, :] = 1  # Trial
+            # DAC voltage = sum of active bit weights
+            v_dac = np.dot(bits.T, bit_weights).flatten()  # shape (n,)
+            if comp_noise_rms > 0:
+                noise = np.random.normal(0, comp_noise_rms, n)
+            else:
+                noise = 0
+            mask = v_in < (v_dac + comp_offset + noise)
+            bits[i, mask] = 0  # Clear for samples where input < dac
+
+        # Convert bits to code
+        codes = np.zeros(n, dtype=np.int32)
+        for i in range(n_bits):
+            codes += bits[i] * (1 << i)
+        return codes
 
 
 # =============================================================================
 # TB1: Static Linearity (DNL/INL)
 # =============================================================================
-def measure_linearity(comp_offset=0.0, comp_noise_rms=0.0):
+def measure_linearity(comp_offset=0.0, comp_noise_rms=0.0, cap_weights=None):
     """Full ramp test: sweep input, compute DNL and INL for all 4096 codes."""
     print("\n=== TB1: Static Linearity (DNL/INL) ===")
+    if cap_weights is not None:
+        print("  Using mismatched DAC capacitors")
 
     # Ramp input with many points per code for accurate transition detection
     n_points = NCODES * 8  # 8 points per LSB
     v_in = np.linspace(0, VREF, n_points, endpoint=False)
-    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms)
+    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms,
+                              cap_weights)
 
     # Find code transition points (where code changes)
     transitions = np.zeros(NCODES)
@@ -607,9 +644,11 @@ def measure_linearity(comp_offset=0.0, comp_noise_rms=0.0):
 # =============================================================================
 # TB2: Dynamic Performance (ENOB)
 # =============================================================================
-def measure_enob(comp_offset=0.0, comp_noise_rms=0.0):
+def measure_enob(comp_offset=0.0, comp_noise_rms=0.0, cap_weights=None):
     """Sine wave test with FFT for ENOB measurement."""
     print("\n=== TB2: Dynamic Performance (ENOB) ===")
+    if cap_weights is not None:
+        print("  Using mismatched DAC capacitors")
 
     # Coherent sampling: choose input frequency so integer cycles fit in NFFT
     nfft = 4096
@@ -625,7 +664,8 @@ def measure_enob(comp_offset=0.0, comp_noise_rms=0.0):
     v_in = v_cm + amplitude * np.sin(2 * np.pi * f_in * t)
 
     # Convert all samples
-    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms)
+    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms,
+                              cap_weights)
 
     # FFT
     window = np.hanning(nfft)
@@ -705,13 +745,14 @@ def measure_enob(comp_offset=0.0, comp_noise_rms=0.0):
 # =============================================================================
 # TB5: Transfer Function
 # =============================================================================
-def measure_transfer_function(comp_offset=0.0, comp_noise_rms=0.0):
+def measure_transfer_function(comp_offset=0.0, comp_noise_rms=0.0, cap_weights=None):
     """DC sweep for transfer function."""
     print("\n=== TB5: Transfer Function ===")
 
     n_points = 2000
     v_in = np.linspace(0, VREF, n_points)
-    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms)
+    codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms,
+                              cap_weights)
 
     # Check monotonicity
     is_monotonic = all(codes[i] <= codes[i+1] for i in range(len(codes)-1))
@@ -809,12 +850,12 @@ def monte_carlo_mismatch(comp_offset=0.0, n_runs=200):
     for run in range(n_runs):
         caps = generate_mismatched_caps(NBITS)
 
-        # Quick DNL/INL measurement (fewer points for speed)
-        n_pts = NCODES * 4
+        # DNL/INL via deterministic ramp (avoids histogram noise)
+        n_pts = NCODES * 16  # 16 points per code = 1/16 LSB resolution
         v_in = np.linspace(0, VREF, n_pts, endpoint=False)
         codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, 0, caps)
 
-        # Find transitions
+        # Find transition points
         transitions = np.zeros(NCODES)
         for k in range(NCODES):
             indices = np.where(codes == k)[0]
@@ -824,21 +865,24 @@ def monte_carlo_mismatch(comp_offset=0.0, n_runs=200):
                 transitions[k] = np.nan
 
         # DNL
-        dnl = np.full(NCODES, np.nan)
         ideal_width = VREF / NCODES
+        dnl = np.full(NCODES, np.nan)
         for k in range(1, NCODES - 1):
             if not np.isnan(transitions[k]) and not np.isnan(transitions[k + 1]):
                 code_width = transitions[k + 1] - transitions[k]
                 dnl[k] = code_width / ideal_width - 1.0
+            elif np.isnan(transitions[k]):
+                dnl[k] = -1.0  # missing code
 
         valid_dnl = dnl[~np.isnan(dnl)]
         dnl_max = np.max(np.abs(valid_dnl)) if len(valid_dnl) > 0 else 999
-        missing = int(np.sum(dnl[1:-1] <= -0.99)) if len(valid_dnl) > 0 else NCODES
+        missing = int(np.sum(np.isnan(transitions[1:-1])))
 
-        # INL
-        inl = np.nancumsum(dnl[1:])
-        if len(inl) > 0:
-            slope = inl[-1] / len(inl) if len(inl) > 0 else 0
+        # INL: cumulative DNL with endpoint correction
+        dnl_for_inl = np.where(np.isnan(dnl), 0, dnl)
+        inl = np.cumsum(dnl_for_inl[1:])
+        if len(inl) > 1:
+            slope = inl[-1] / len(inl)
             inl_corr = inl - slope * np.arange(len(inl))
             inl_max = np.max(np.abs(inl_corr))
         else:
@@ -1112,17 +1156,23 @@ def main():
     power_uw = measure_power()
     results['power_uw'] = power_uw
 
-    # TB1: Static linearity (ideal DAC + real comparator offset)
-    dnl_max, inl_max, missing = measure_linearity(comp_offset=comp_offset)
+    # TB1: Static linearity with one realistic mismatch instance
+    # (ideal DAC plot is misleading — use mismatched DAC for primary result)
+    print("\n  [Using mismatched DAC for primary DNL/INL measurement]")
+    caps_nominal = generate_mismatched_caps(NBITS)
+    dnl_max, inl_max, missing = measure_linearity(comp_offset=comp_offset,
+                                                   cap_weights=caps_nominal)
     results['dnl_lsb'] = dnl_max
     results['inl_lsb'] = inl_max
 
-    # TB2: Dynamic performance
-    enob, sinad, sfdr, thd = measure_enob(comp_offset=comp_offset)
+    # TB2: Dynamic performance (with same mismatch instance)
+    enob, sinad, sfdr, thd = measure_enob(comp_offset=comp_offset,
+                                           cap_weights=caps_nominal)
     results['enob'] = enob
 
-    # TB5: Transfer function
-    input_range, monotonic = measure_transfer_function(comp_offset=comp_offset)
+    # TB5: Transfer function (with same mismatch)
+    input_range, monotonic = measure_transfer_function(comp_offset=comp_offset,
+                                                        cap_weights=caps_nominal)
     results['input_range_v'] = input_range
 
     # TB6: Noise

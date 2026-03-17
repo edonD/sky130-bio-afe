@@ -2,6 +2,8 @@ _tb_*.spice
 _tb*.dat
 _pvt_*.dat
 _mc_*.dat
+_noise_*.dat
+*_noise_pvt_*.spice
 sky130_models
 sky130_fd_pr_models
 *.pyc

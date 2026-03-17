@@ -192,9 +192,12 @@ Robust across full ±10% supply range.
    analytically in Python. This misses charge injection from switches, clock
    feedthrough, finite switch resistance, and capacitor nonlinearity.
 
-3. **Comparator noise model is simplified**: SPICE shows the comparator resolves
-   down to 10 µV deterministically (no noise model). Real noise is ~0.1-0.3 mV
-   from kT/C, modeled as 0.3 mV Gaussian in Python (conservative).
+3. **Comparator noise is a critical margin**: The design passes at noise up to
+   0.5 mV (ENOB > 10, noise < 1.5 LSB). At 0.7 mV, ENOB drops to 9.6 (fail).
+   Theoretical estimate: 0.3-0.7 mV depending on gm and integration time.
+   The 0.3 mV model in evaluation is at the optimistic end. Larger input pair
+   (W=4µm) or longer integration time would reduce noise. SPICE doesn't
+   simulate thermal noise without special setup.
 
 4. **No reference droop**: The reference voltage is assumed ideal.
 

@@ -13,7 +13,7 @@
   - Section 3: Q = 0.90, fc = 180 Hz
   - Section 4: Q = 2.10 (designed), fc = 179 Hz. Compensates opamp Q enhancement to achieve Q_actual ≈ 2.56 (Butterworth target).
 - **Opamp**: Two-stage Miller-compensated CMOS OTA. NMOS diff pair (W=30u, L=4u), PMOS load/mirror (W=4u, L=2u), PMOS CS output stage. ~250 nA bias per opamp. GBW ≈ 6 kHz.
-- **Total**: 5 opamps, supply 1.8 V, power 6.00 µW.
+- **Total**: 5 opamps, supply 1.8 V, power 4.61 µW.
 
 ## Specification Table
 
@@ -21,10 +21,10 @@
 |-----------|--------|----------|--------|--------|
 | f_low (Hz) | < 1.0 | 0.036 | 96% | PASS |
 | f_high (Hz) | 130–170 | 167.9 | in range | PASS |
-| Passband ripple (dB) | < 1.0 | 0.68 | 32% | PASS |
-| Stopband atten @ 250 Hz (dB) | > 20 | 26.4 | 32% | PASS |
+| Passband ripple (dB) | < 1.0 | 0.66 | 34% | PASS |
+| Stopband atten @ 250 Hz (dB) | > 20 | 26.5 | 32% | PASS |
 | Output noise (µVrms) | < 100 | 61.5 | 38% | PASS |
-| Power (µW) | < 10 | 6.00 | 40% | PASS |
+| Power (µW) | < 10 | 4.61 | 54% | PASS |
 
 All six specs pass with >25% margin at nominal conditions.
 
@@ -94,11 +94,11 @@ Our filter's key metrics vs. the filtering stage of commercial bio-AFEs:
 | Bandwidth (Hz) | 0.036–168 | Configurable | Ext. components | Configurable | Configurable |
 | Stopband atten | 26 dB @ 250 Hz | >80 dB (digital) | ~20 dB (3rd order) | >60 dB (digital) | >80 dB (digital) |
 | Passband ripple | 0.65 dB | ~0 (digital) | Component-dependent | ~0 (digital) | ~0 (digital) |
-| Filter power | 6.00 µW | Included in 900 µW/ch | ~45 µW (est.) | Included in 85 µW | Included in 335 µW/ch |
+| Filter power | 4.61 µW | Included in 900 µW/ch | ~45 µW (est.) | Included in 85 µW | Included in 335 µW/ch |
 | Filter noise | 61.5 µVrms | N/A (digital) | ~10 µVrms | N/A (digital) | N/A (digital) |
 
 **Where we beat competitors**:
-1. **Power**: 6.00 µW is far lower than AD8233's analog filter (~45 µW) and competitive with the filter portion of digital solutions
+1. **Power**: 4.61 µW is far lower than AD8233's analog filter (~45 µW) and competitive with the filter portion of digital solutions
 2. **Bandwidth accuracy**: 0.036 Hz HPF corner preserves all ECG content including P-wave (0.5 Hz) with negligible attenuation
 3. **Standalone analog**: No clock/digital noise coupling, suitable for preceding a sigma-delta ADC
 
@@ -163,7 +163,8 @@ The sigma-delta ADC in the v2 signal chain provides its own digital decimation f
 | 14–16 | 1.00 | Fine-tuned 6th-order, best margins 9–12% |
 | 17–20 | 0.85–1.00 | 8th-order with Q compensation, fc sweep |
 | 21 | 1.00 | Optimized 8th-order, all margins >25% |
-| 22 (final) | 1.00 | Diff pair L=4u: noise 65.5→61.5 µVrms. Power 6.0 µW. All margins >25%. |
+| 22 | 1.00 | Diff pair L=4u: noise 65.5→61.5 µVrms. Power 6.0 µW. All margins >25%. |
+| 23 (final) | 1.00 | M7 w=1.5u: power 4.61 µW (54% margin). Tested w=1u but unstable at sf_125C. |
 
 ## Limitations
 

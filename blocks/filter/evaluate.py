@@ -611,6 +611,153 @@ def score_results(measurements):
     return final_score, specs_met, total_specs, results
 
 ###############################################################################
+# TB4: ECG TRANSIENT
+###############################################################################
+
+def tb4_ecg_transient():
+    """Synthetic ECG + 60 Hz interference, check R-peak preservation."""
+    print("\n" + "=" * 60)
+    print("TB4: ECG Transient")
+    print("=" * 60)
+
+    with open('design.cir', 'r') as f:
+        base_netlist = f.read()
+
+    # Generate synthetic ECG waveform as a PWL source
+    # Simple ECG: 1 mV R-peak, 70 BPM (period = 0.857s)
+    # Plus 50 µV of 60 Hz interference
+    # ECG shape: triangular R-peak approximation
+    dt = 0.001  # 1 ms resolution
+    t_total = 3.0  # 3 seconds
+    n_pts = int(t_total / dt)
+    t = np.linspace(0, t_total, n_pts)
+
+    # Simple ECG model: sharp R-peak every 0.857s
+    ecg = np.zeros_like(t)
+    period = 60.0 / 72  # 72 BPM = 0.833s period
+    for beat_time in np.arange(0.2, t_total, period):
+        # R-peak: triangular, 20ms wide, 1 mV amplitude
+        mask = np.abs(t - beat_time) < 0.010
+        ecg[mask] = 1e-3 * (1 - np.abs(t[mask] - beat_time) / 0.010)
+        # P-wave: 5ms before R, 0.15 mV
+        p_time = beat_time - 0.06
+        mask_p = np.abs(t - p_time) < 0.020
+        ecg[mask_p] += 0.15e-3 * np.cos(np.pi * (t[mask_p] - p_time) / 0.040)
+        # T-wave: 0.15s after R, 0.3 mV
+        t_time = beat_time + 0.15
+        mask_t = np.abs(t - t_time) < 0.060
+        ecg[mask_t] += 0.3e-3 * np.cos(np.pi * (t[mask_t] - t_time) / 0.120)
+
+    # Add 60 Hz interference (50 µV amplitude)
+    interference = 50e-6 * np.sin(2 * np.pi * 60 * t)
+    ecg_total = ecg + interference
+
+    # Write PWL source
+    pwl_str = " ".join(f"{t[i]:.6f} {ecg_total[i]:.9f}" for i in range(0, n_pts, 5))
+
+    netlist = base_netlist.replace(
+        'Vin input vcm dc 0 ac 1',
+        f'Vin input vcm PWL({pwl_str})'
+    )
+    netlist = strip_final_end(netlist)
+    netlist += """
+* TB4: ECG Transient
+.tran 0.5m 3 0 0.5m
+
+.control
+run
+wrdata ecg_data.txt v(output) v(input)
+quit
+.endc
+
+.end
+"""
+
+    output, rc = run_ngspice(netlist, timeout=300)
+
+    if not os.path.exists('ecg_data.txt'):
+        print("  ERROR: ecg_data.txt not generated")
+        return None
+
+    arr = read_wrdata('ecg_data.txt')
+    if arr is None or len(arr) < 10:
+        print("  ERROR: Bad ECG data")
+        return None
+
+    time_out = arr[:, 0]
+    vout = arr[:, 1]
+
+    # Remove duplicates
+    unique_idx = []
+    last_t = -1
+    for i, tt in enumerate(time_out):
+        if tt != last_t:
+            unique_idx.append(i)
+            last_t = tt
+    time_out = time_out[unique_idx]
+    vout = vout[unique_idx]
+
+    # Remove DC offset (VCM)
+    vout_ac = vout - np.mean(vout)
+
+    # Find R-peaks in output
+    from scipy.signal import find_peaks
+    # R-peaks should be the tallest peaks
+    peaks_out, props = find_peaks(vout_ac, height=0.1e-3, distance=int(0.5/0.001))
+
+    # Expected R-peak amplitude (input = 1 mV, filter gain ≈ 1)
+    expected_rpeak = 1e-3
+
+    if len(peaks_out) > 0:
+        rpeak_amplitudes = vout_ac[peaks_out]
+        avg_rpeak = np.mean(rpeak_amplitudes)
+        rpeak_error = abs(avg_rpeak - expected_rpeak) / expected_rpeak * 100
+        print(f"  Found {len(peaks_out)} R-peaks")
+        print(f"  Average R-peak amplitude: {avg_rpeak*1e3:.3f} mV (expected: {expected_rpeak*1e3:.1f} mV)")
+        print(f"  R-peak error: {rpeak_error:.1f}%")
+        rpeak_pass = rpeak_error < 5  # ±5% criterion
+        print(f"  R-peak test: {'PASS' if rpeak_pass else 'FAIL'}")
+    else:
+        print("  WARNING: No R-peaks found in output")
+        avg_rpeak = 0
+        rpeak_error = 100
+        rpeak_pass = False
+
+    # Plot input vs output
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+
+    # Reconstruct input for plotting (use the ECG waveform we generated)
+    t_ecg = t[:len(t)]
+    ecg_plot = ecg_total[:len(t)]
+
+    ax1.plot(t_ecg * 1000, ecg_plot * 1000, 'b-', linewidth=0.8, label='ECG + 60Hz')
+    ax1.plot(t_ecg * 1000, ecg[:len(t)] * 1000, 'r--', linewidth=0.5, alpha=0.5, label='Pure ECG')
+    ax1.set_ylabel('Input Voltage (mV)')
+    ax1.set_title('TB4: ECG Transient — Input vs Filtered Output')
+    ax1.legend(fontsize=8)
+    ax1.grid(True, alpha=0.3)
+
+    ax2.plot(time_out * 1000, vout_ac * 1000, 'b-', linewidth=0.8, label='Filtered Output')
+    if len(peaks_out) > 0:
+        ax2.plot(time_out[peaks_out] * 1000, vout_ac[peaks_out] * 1000, 'rv', markersize=8, label='R-peaks')
+    ax2.set_xlabel('Time (ms)')
+    ax2.set_ylabel('Output Voltage (mV)')
+    ax2.legend(fontsize=8)
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(f'{PLOTS_DIR}/ecg_filtering.png', dpi=150)
+    plt.close()
+    print(f"  Plot saved: {PLOTS_DIR}/ecg_filtering.png")
+
+    return {
+        'n_rpeaks': len(peaks_out),
+        'avg_rpeak_mv': avg_rpeak * 1e3 if peaks_out.size > 0 else 0,
+        'rpeak_error_pct': rpeak_error,
+        'rpeak_pass': rpeak_pass,
+    }
+
+###############################################################################
 # TB6: PVT CORNERS
 ###############################################################################
 
@@ -752,6 +899,9 @@ def main():
     noise = tb5_noise()
     if noise:
         measurements['output_noise_uvrms'] = noise['output_noise_uvrms']
+
+    # TB4: ECG Transient
+    tb4 = tb4_ecg_transient()
 
     # TB6: PVT Corners
     pvt = tb6_pvt_corners()

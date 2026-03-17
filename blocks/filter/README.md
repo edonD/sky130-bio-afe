@@ -87,7 +87,7 @@ The PMOS anti-parallel pseudo-resistor caused DC convergence failure: when the v
 ## Known Limitations
 
 1. **Step response (TB3)**: With f_low=0.035 Hz, the HPF time constant is ~4.6s. A 300 mV step doesn't settle within 5 seconds. To fix: increase f_low to ~0.12 Hz (requires careful ripple/step tradeoff).
-2. **Ideal feedback resistor**: The 100GΩ resistor is not realizable on-chip without a pseudo-resistor. A proper gate-biased PMOS implementation is needed.
+2. **Ideal feedback resistor**: The 100GΩ resistor is not realizable on-chip without a pseudo-resistor. Both anti-parallel and gate-biased PMOS topologies were tested; both fail ngspice DC convergence due to the PMOS nonlinear I-V creating multiple stable operating points. In silicon, this is resolved with startup circuits (POR switch shorting the pseudo-R during power-up, then opening). This is a well-known challenge in bio-amplifier design, documented in Harrison & Charles (2003) and many subsequent papers.
 3. **Tight margins**: Stopband attenuation (21.8 dB) and power (9.09 µW) are close to limits. PVT variation could push them out of spec.
 4. **High-frequency feedthrough**: Some signal leaks through above ~1 kHz (visible in Bode plot), likely through parasitic capacitances. Not a concern for the 0.5–150 Hz signal band.
 5. **Output impedance**: Rout = 100Ω at DC. With 5 pF ADC sampling cap and 1 kSPS (500 µs acquisition), τ = 50 ns → 10,000× margin. OK.

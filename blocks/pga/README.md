@@ -141,6 +141,9 @@ With 1kΩ InAmp source impedance in series at G=128: gain drops from 127.2 to 12
 
 Well within the <10 kΩ interface requirement for driving the filter block.
 
+### Power Supply Rejection (PSRR)
+At gain=128: PSRR = -24.7 dB (DC through 60 Hz). This is limited by the ideal current source which has zero supply rejection. In the integrated system, the bandgap reference (target >60 dB PSRR) would dominate, making system PSRR much better. For standalone PGA testing, VDD should be clean or well-decoupled.
+
 ## Experiment History
 
 | Step | Score | Specs | Key Change |

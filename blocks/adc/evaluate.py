@@ -749,7 +749,7 @@ def robustness_test(params, ota_gain_db):
     fclk = params['f_clk']
     fs_out = fclk / osr
 
-    N_out = 4096
+    N_out = 32768  # enough for ~20 ENOB measurement
     N_mod = N_out * osr
 
     k = max(1, int(round(100.0 * N_out / fs_out)))
@@ -759,9 +759,9 @@ def robustness_test(params, ota_gain_db):
     t_mod = np.arange(N_mod) / fclk
     vin = amplitude * np.sin(2 * np.pi * f_signal * t_mod)
 
-    # Parameters to vary
-    vary_params = ['coeff_a1', 'coeff_a2', 'coeff_a3', 'coeff_b1',
-                   'p_cap_s', 'p_cap_i', 'p_ibias']
+    # Parameters to vary (only analog parameters, not modulator coefficients
+    # which are digital and exact)
+    vary_params = ['p_cap_s', 'p_cap_i', 'p_ibias']
 
     results = []
     all_pass = True

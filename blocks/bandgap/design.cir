@@ -55,7 +55,7 @@
 * === Parameters ===
 .param p_wp_pass = 8e-6
 .param p_lp_pass = 1e-6
-.param p_ra_l = 110e-6
+.param p_ra_l = 118e-6
 .param p_rptat_l = 12e-6
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
@@ -90,7 +90,9 @@ XQ2 vss vss eb vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
 Cvref vref vss {p_cap}
 * Weak startup: ensures V_REF > 0 at power-up so op-amp can function
 * Also helps convergence during DC sweeps
-Rstart vdd vref 2e6
+* Startup: weak pull toward ~1.2V target via voltage divider
+Rstart1 vdd vref 3e6
+Rstart2 vref vss 9e6
 
 * === Op-Amp (NFET diff pair, PMOS load) ===
 * + = node_a (Vbe1 ≈ 0.69V), - = node_b (I*Rptat + Vbe2 ≈ 0.69V)
@@ -118,7 +120,10 @@ Ccomp opamp_out vss 1p
 .lib "sky130_models/sky130.lib.spice" tt
 .option reltol=0.003 abstol=1e-12 gmin=1e-12 method=gear
 .option itl1=500 itl2=200 rshunt=1e9
-.nodeset v(vref)=1.2 v(node_a)=0.7 v(node_b)=0.7 v(opamp_out)=0.8
+* Strong initial conditions for convergence across temperature
+.nodeset v(vref)=1.18 v(node_a)=0.69 v(node_b)=0.69 v(opamp_out)=0.7
++ v(ota_outn)=0.7 v(ota_outp)=0.7 v(ota_tail)=0.05 v(ota_bias)=0.8
++ v(eb)=0.64
 
 .control
 op

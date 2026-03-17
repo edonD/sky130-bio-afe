@@ -1,0 +1,118 @@
+* SKY130 Bandpass Filter — Iteration 5
+* Architecture: HPF (1st order) + 6th-order Sallen-Key Butterworth LPF
+*
+* Key change: 6th-order LPF at fc=170 Hz solves the impossible spec
+* conflict of 4th-order: gain(150Hz) = -0.87 dB, ripple < 1 dB, while
+* keeping f_high ∈ [130,170] and >20 dB at 250 Hz.
+*
+* Power budget: 4 opamps × ~2 µA = 8 µA × 1.8V ≈ 14.4 µW — tight!
+* Reduce bias to ~350 nA to fit under 10 µW.
+
+.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
+
+.param vdd_val = 1.8
+.param vcm_val = 0.9
+
+**********************************************
+* SUPPLY AND BIAS
+**********************************************
+Vdd vdd 0 {vdd_val}
+Vss vss 0 0
+Vcm vcm 0 {vcm_val}
+
+* Bias: ~350 nA reference
+Rbias vdd nbias 3.3Meg
+Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
+
+**********************************************
+* TWO-STAGE MILLER OPAMP (low-power variant)
+**********************************************
+* Stage 1: ~300 nA diff pair. Stage 2: ~600 nA output.
+* Parameterized Cc for per-section stability tuning.
+.subckt miller_opamp inp inn out vdd vss nbias params: cc_val=50p
+* PMOS mirror load
+XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
+XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
+* NMOS diff pair (wide + long for minimum 1/f noise: W=30u, L=2u)
+XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
+XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
+* Tail current source (~300 nA)
+XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
+* Stage 2: PMOS CS driver
+XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
+* Stage 2 current source (~500 nA)
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=3u l=4u
+* Miller compensation (parameterized)
+Cc s1out out {cc_val}
+.ends miller_opamp
+
+**********************************************
+* DC FEEDBACK RESISTOR
+**********************************************
+* Ideal 100 GΩ — sets f_low = 1/(2*pi*100G*50p) = 0.032 Hz
+* TODO: Replace with proper PMOS pseudo-resistor
+.subckt pseudo_res a b vdd
+Rpr a b 100G
+.ends pseudo_res
+
+**********************************************
+* STAGE 1: HIGH-PASS FILTER (1st order)
+**********************************************
+C_in input hpf_in 50p ic=0
+Xpr_fb hpf_in hpf_out vdd pseudo_res
+C_fb hpf_in hpf_out 50p ic=0
+Xamp1 vcm hpf_in hpf_out vdd vss nbias miller_opamp cc_val=50p
+
+**********************************************
+* STAGE 2: 6th-order Sallen-Key Butterworth LPF at fc=170 Hz
+**********************************************
+* R = 10 MΩ for all sections
+* k = 1/(2*pi*10M*170) = 93.6 pF = sqrt(C1*C2) per section
+*
+* 6th-order Butterworth pole pairs:
+*   Section 1: Q = 0.5176
+*   Section 2: Q = 0.7071
+*   Section 3: Q = 1.9319
+*
+* --- Section 1 (Q=0.5176) ---
+* C1/C2 = (2*0.5176)^2 = 1.071
+* C2 = 91 pF, C1 = 97 pF
+* f0 = 1/(2*pi*10M*sqrt(97*91)) = 169.4 Hz
+R_s1a hpf_out s1_mid 10Meg
+R_s1b s1_mid s1_buf 10Meg
+C_s1a s1_mid s1_out 97p
+C_s1b s1_buf vcm 90p
+Xamp2 s1_buf s1_out s1_out vdd vss nbias miller_opamp cc_val=50p
+
+* --- Section 2 (Q=0.7071) ---
+* C1/C2 = 2.000
+* C2 = 66 pF, C1 = 132 pF
+* f0 = 1/(2*pi*10M*sqrt(132*66)) = 170.4 Hz
+R_s2a s1_out s2_mid 10Meg
+R_s2b s2_mid s2_buf 10Meg
+C_s2a s2_mid s2_out 132p
+C_s2b s2_buf vcm 66p
+Xamp3 s2_buf s2_out s2_out vdd vss nbias miller_opamp cc_val=50p
+
+* --- Section 3 (Q=1.9319) ---
+* C1/C2 = 14.93
+* C2 = 24 pF, C1 = 360 pF
+* f0 = 1/(2*pi*10M*sqrt(360*24)) = 171.2 Hz
+* NOTE: Cc=100p for this section for better phase margin with 360pF load
+R_s3a s2_out s3_mid 10Meg
+R_s3b s3_mid s3_buf 10Meg
+C_s3a s3_mid s3_out 375p
+C_s3b s3_buf vcm 24p
+Xamp4 s3_buf s3_out s3_out vdd vss nbias miller_opamp cc_val=100p
+
+**********************************************
+* OUTPUT
+**********************************************
+Rout s3_out output 100
+
+**********************************************
+* INPUT SOURCE
+**********************************************
+Vin input vcm dc 0 ac 1
+
+.end

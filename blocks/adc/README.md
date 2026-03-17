@@ -188,9 +188,11 @@ Robust across full ±10% supply range.
    voltage only swings by ±residual/2, so VCM stays in the good range.
    Result: **zero missing codes** across the full input range with corrected model.
 
-2. **No SPICE-level DAC simulation**: The charge redistribution is modeled
-   analytically in Python. This misses charge injection from switches, clock
-   feedthrough, finite switch resistance, and capacitor nonlinearity.
+2. **DAC partially verified in SPICE**: A 4-bit proof-of-concept DAC simulation
+   with SKY130 MIM caps confirms charge redistribution works correctly
+   (vtop=0.9V during sample, 1.28V after MSB trial vs 1.3V ideal). The 20mV
+   error is from switch charge injection — a systematic offset, not linearity.
+   Full 12-bit SPICE DAC simulation remains future work.
 
 3. **Comparator noise**: SPICE gm extraction gives gm=1.01 mA/V for W=3µm at
    VGS=0.9V. With ~200 ps integration time (half of 0.4 ns delay), noise ≈

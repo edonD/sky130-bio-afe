@@ -1,0 +1,15 @@
+parameter,value,unit,description
+wtail,4u,um,Tail NMOS width
+win,2u,um,Input pair NMOS width
+wn,1u,um,NMOS latch width
+wp,1u,um,PMOS latch/reset width
+lmin,0.15u,um,Channel length (minimum for 1.8V devices)
+vref,1.8,V,Reference voltage (= VDD for full rail-to-rail)
+cap_unit_w,10,um,Unit capacitor width (MIM)
+cap_unit_l,10,um,Unit capacitor length (MIM)
+cap_unit_value,208,fF,Unit capacitor value (2.0 fF/um^2 density)
+cap_total,852,pF,Total DAC capacitance
+cap_mismatch_ac,2.8,%·um,Pelgrom mismatch coefficient
+cap_sigma_ratio,0.28,%,Unit cap mismatch (sigma/C at 10x10um)
+clk_period,100,ns,Comparator clock period (for characterization)
+comp_load_cap,10,fF,Load capacitance on comparator outputs

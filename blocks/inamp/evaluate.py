@@ -1,942 +1,483 @@
 #!/usr/bin/env python3
 """
 SKY130 Instrumentation Amplifier — Evaluator
-Runs all testbenches, extracts measurements, scores against specs.
+Fully-differential CCIA with folded-cascode OTA and ideal CMFB.
 """
 
 import subprocess
 import os
-import sys
 import json
 import math
 import re
 import numpy as np
 
-# Work from the script's directory
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
-DESIGN_FILE = "design.cir"
+PLOTS_DIR = "plots"
 SPECS_FILE = "specs.json"
 MEASUREMENTS_FILE = "measurements.json"
-PLOTS_DIR = "plots"
-NGSPICE = "ngspice"
-
-# Ensure plots directory exists
 os.makedirs(PLOTS_DIR, exist_ok=True)
 
-# Load specs
 with open(SPECS_FILE) as f:
     specs = json.load(f)
 
+# ── Fully-differential folded-cascode OTA ─────────────────────
+# High open-loop gain for accurate Cin/Cfb gain setting.
+# PMOS input pair: large W/L for low 1/f noise.
+# NMOS cascode loads for high output impedance.
+# Ideal CMFB sets output CM to 0.9V.
+OTA = r"""
+.subckt fd_ota inp inn outp outn vdd vss
 
-def run_ngspice(netlist_str, timeout=120):
-    """Run an ngspice simulation and return stdout."""
-    tmpfile = "/tmp/inamp_tb.cir"
-    with open(tmpfile, "w") as f:
-        f.write(netlist_str)
+.param wp_in  = 100u
+.param lp_in  = 4u
+.param wn_ld  = 5u
+.param ln_ld  = 4u
+.param wn_cas = 5u
+.param ln_cas = 1u
+.param itail  = 3u
+.param ifold  = 2u
+
+* PMOS tail current source (ideal)
+Itail vdd tail {itail}
+
+* PMOS input differential pair
+* M1: gate=inn, drain=fd1 → inn is inverting for outp (via fold)
+* M2: gate=inp, drain=fd2 → inp is inverting for outn (via fold)
+* NOTE: cross-connection — M1 drain goes to fold1 which drives outn,
+*       M2 drain goes to fold2 which drives outp.
+* Actually: M1.drain=fd1, Mn_cas1(fd1→outn), so inn↑ → M1 less current
+*   → less current into fd1 → Mn_cas1 carries less → outn rises.
+*   So inn is NON-inverting for outn, INVERTING for outp.
+Xm1 fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2 fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+
+* PMOS fold current sources from VDD (ideal)
+* These inject current at the output nodes
+Ifold1 vdd outn {ifold}
+Ifold2 vdd outp {ifold}
+
+* NMOS cascodes: carry signal current from output to fold nodes
+Xm_nc1 outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc2 outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+
+* NMOS loads at fold nodes (gate from CMFB)
+Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w={wn_ld} l={ln_ld}
+Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w={wn_ld} l={ln_ld}
+
+* Cascode bias: needs to be above Vgs_M3 + Vth_cas
+* V(fd) ≈ 0.4-0.5V, so ncas ≈ 0.9V puts cascode well in saturation
+Vncas ncas vss 0.9
+
+* Ideal CMFB: adjust NMOS load gate to set output CM = 0.9V
+* Nominal ncmfb ≈ 0.45V; CMFB gain = 50
+Ecmfb ncmfb vss vol='max(0.2, min(1.2, 0.45 + 50*((v(outp)+v(outn))/2 - 0.9)))'
+
+.ends fd_ota
+"""
+
+HDR = '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt\n'
+
+
+def make_inamp(vcm_inp=0.9, vcm_inn=0.9, ac_inp="0", ac_inn="0",
+               extra="", cin="10p", cfb="200f", rfb="1T", rpb="1T"):
+    """Build complete InAmp netlist: OTA + caps + bias."""
+    return HDR + OTA + f"""
+.param cin_v  = {cin}
+.param cfb_v  = {cfb}
+.param rfb_v  = {rfb}
+.param rpb_v  = {rpb}
+
+VDD vdd 0 1.8
+
+* Input sources
+Vip inp_ext 0 DC {vcm_inp} AC {ac_inp}
+Vin inn_ext 0 DC {vcm_inn} AC {ac_inn}
+
+* Input coupling capacitors (reject DC electrode offset)
+Cin_p inp_ext gp {{cin_v}}
+Cin_n inn_ext gn {{cin_v}}
+
+* DC bias for OTA inputs (pseudo-resistors to Vcm=0.9V)
+Rpb_p vcm gp {{rpb_v}}
+Rpb_n vcm gn {{rpb_v}}
+Vcm   vcm 0 0.9
+
+* Feedback caps (gain = Cin/Cfb ≈ 50 V/V = 34 dB)
+* gp → inp of OTA (inverting for outp)
+* gn → inn of OTA (inverting for outn)
+* Negative feedback: outp → gp, outn → gn
+Cfb_p outp gp {{cfb_v}}
+Cfb_n outn gn {{cfb_v}}
+
+* DC feedback resistors in parallel with Cfb
+* Sets HPF cutoff: f_HPF = 1/(2π × Rfb × Cfb)
+* With Rfb=1T, Cfb=200f: f_HPF ≈ 0.8 Hz
+Rfb_p outp gp {{rfb_v}}
+Rfb_n outn gn {{rfb_v}}
+
+* OTA: gp=inp (inverting for outp), gn=inn (inverting for outn)
+Xota gp gn outp outn vdd 0 fd_ota
+
+* Load caps (next stage input)
+CL_p outp 0 1p
+CL_n outn 0 1p
+
+* Initial conditions
+.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
+
+{extra}
+"""
+
+
+def run_ngspice(netlist, timeout=120):
+    path = "/tmp/inamp_tb.cir"
+    with open(path, "w") as f:
+        f.write(netlist)
     try:
-        result = subprocess.run(
-            [NGSPICE, "-b", tmpfile],
-            capture_output=True, text=True, timeout=timeout
-        )
-        return result.stdout + result.stderr
+        r = subprocess.run(["ngspice", "-b", path],
+                           capture_output=True, text=True, timeout=timeout)
+        return r.stdout + "\n" + r.stderr
     except subprocess.TimeoutExpired:
-        return "ERROR: Simulation timed out"
+        return "ERROR: timeout"
 
 
-def read_design_params():
-    """Read the design.cir and extract .param lines for reuse."""
-    with open(DESIGN_FILE) as f:
-        content = f.read()
-    # Extract everything up to .end
-    lines = []
-    for line in content.split('\n'):
-        if line.strip().lower() == '.end':
-            break
-        lines.append(line)
-    return '\n'.join(lines)
+def grab(output, name):
+    m = re.search(rf'{name}\s*=\s*([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)', output)
+    return float(m.group(1)) if m else None
 
 
-def get_lib_and_params():
-    """Get the .lib statement and parameters from design.cir."""
-    design_header = read_design_params()
-    return design_header
-
-
-def parse_measurement(output, name):
-    """Parse a measurement value from ngspice output."""
-    # Look for: name = value
-    pattern = rf'{name}\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)'
-    match = re.search(pattern, output)
-    if match:
-        return float(match.group(1))
-    return None
-
-
+# ── TB1: DC Gain ──────────────────────────────────────────────
 def tb1_dc_gain():
-    """TB1: DC Gain and Operating Point"""
-    print("\n" + "="*60)
-    print("TB1: DC Gain and Operating Point")
-    print("="*60)
-
-    netlist = f"""* TB1: DC Gain Test
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-* Bias
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Differential input: 0.5mV differential on 0.9V common-mode
-Vinp inp 0 DC 0.9005
-Vinn inn 0 DC 0.8995
-
-* Input coupling
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-* DC bias
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-* Feedback caps
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-* PMOS tail
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-* Input pair
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-* NMOS loads
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Cascodes
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-* CMFB (simplified)
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
-* --- Transient to let caps charge ---
-.tran 1m 2 uic
+    print("\n>>> TB1: DC Gain (1 mV differential, transient 1s)")
+    net = make_inamp(
+        vcm_inp=0.9005, vcm_inn=0.8995,
+        extra=f"""
+.tran 1m 1
 
 .control
 run
-
-* Measure final voltages
-let vout_diff = v(outp) - v(outn)
-let vout_p = v(outp)
-let vout_n = v(outn)
-let vcm_out = (v(outp) + v(outn))/2
-
-* Take values at end of simulation
-let final_vout_diff = vout_diff[length(vout_diff)-1]
-let final_voutp = vout_p[length(vout_p)-1]
-let final_voutn = vout_n[length(vout_n)-1]
-let final_vcm = vcm_out[length(vcm_out)-1]
-
-print final_vout_diff final_voutp final_voutn final_vcm
-
-* Save plot
+let vdiff = v(outp) - v(outn)
+let t_len = length(vdiff) - 1
+let final_vdiff = vdiff[t_len]
+let final_outp = v(outp)[t_len]
+let final_outn = v(outn)[t_len]
+let final_cm = (v(outp)[t_len] + v(outn)[t_len])/2
+print final_vdiff final_outp final_outn final_cm
 set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/dc_gain vout_diff title "Differential Output vs Time" ylabel "Voltage (V)" xlabel "Time (s)"
-
+gnuplot {PLOTS_DIR}/dc_gain vdiff title "Diff Output (1mV diff input)" ylabel "V" xlabel "s"
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist)
-    print(output[-2000:] if len(output) > 2000 else output)
-
-    vout_diff = parse_measurement(output, "final_vout_diff")
-    voutp = parse_measurement(output, "final_voutp")
-    voutn = parse_measurement(output, "final_voutn")
-    vcm_out = parse_measurement(output, "final_vcm")
-
-    if vout_diff is not None:
-        vin_diff = 0.001  # 1 mV
-        gain = abs(vout_diff) / vin_diff
-        gain_db = 20 * math.log10(max(gain, 1e-10))
-        print(f"  Vout_diff = {vout_diff*1000:.3f} mV")
-        print(f"  Gain = {gain:.1f} V/V = {gain_db:.1f} dB")
-        print(f"  Voutp = {voutp:.4f} V, Voutn = {voutn:.4f} V")
-        print(f"  Output CM = {vcm_out:.4f} V")
-
-        # Check output not railed
-        if voutp is not None and voutn is not None:
-            if voutp < 0.2 or voutp > 1.6 or voutn < 0.2 or voutn > 1.6:
-                print("  WARNING: Output may be railed!")
-
-        return {"gain_vv": gain, "gain_db": gain_db, "voutp": voutp, "voutn": voutn, "vcm_out": vcm_out}
-    else:
-        print("  ERROR: Could not parse output")
+""")
+    out = run_ngspice(net, timeout=180)
+    print(out[-1500:])
+    vdiff = grab(out, "final_vdiff")
+    voutp = grab(out, "final_outp")
+    voutn = grab(out, "final_outn")
+    vcm = grab(out, "final_cm")
+    if vdiff is None:
         return None
+    gain = abs(vdiff) / 0.001
+    gain_db = 20 * math.log10(max(gain, 1e-10))
+    print(f"  Vdiff_out={vdiff*1000:.3f} mV  Gain={gain:.1f} V/V = {gain_db:.1f} dB")
+    print(f"  Voutp={voutp:.4f}  Voutn={voutn:.4f}  CM={vcm:.4f}")
+    sat = (voutp is not None and (voutp < 0.2 or voutp > 1.6)) or \
+          (voutn is not None and (voutn < 0.2 or voutn > 1.6))
+    if sat:
+        print("  WARNING: output may be saturated!")
+    return {"gain_db": gain_db, "gain_vv": gain, "voutp": voutp, "voutn": voutn,
+            "vcm_out": vcm, "saturated": sat}
 
 
-def tb2_ac_response():
-    """TB2: AC Frequency Response"""
-    print("\n" + "="*60)
-    print("TB2: AC Frequency Response")
-    print("="*60)
-
-    netlist = f"""* TB2: AC Response
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* AC differential input
-Vinp inp 0 DC 0.9 AC 0.5
-Vinn inn 0 DC 0.9 AC -0.5
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
-.ac dec 50 0.1 10Meg
+# ── TB2: AC Response ──────────────────────────────────────────
+def tb2_ac():
+    print("\n>>> TB2: AC Frequency Response")
+    net = make_inamp(
+        ac_inp="0.5", ac_inn="-0.5",
+        extra=f"""
+.ac dec 50 0.01 100Meg
 
 .control
 run
+let vdiff = v(outp) - v(outn)
+let gain_db = vdb(vdiff)
 
-let vout_diff_mag = vm(outp) - vm(outn)
-let gain_db = db(v(outp) - v(outn))
-let phase_deg = 180/PI * (ph(v(outp)) - ph(v(outn)))
-
-* Find gain at key frequencies
-meas ac gain_1hz find vdb(outp)-vdb(outn) at=1
-meas ac gain_60hz find vdb(outp)-vdb(outn) at=60
-meas ac gain_150hz find vdb(outp)-vdb(outn) at=150
-
-* Find -3dB bandwidth
-let diff_out = v(outp) - v(outn)
-meas ac midband_gain max vdb(diff_out) from=1 to=1k
-meas ac bw_3db when vdb(diff_out)=(midband_gain-3) fall=1
+meas ac gain_1hz   FIND vdb(vdiff) AT=1
+meas ac gain_60hz  FIND vdb(vdiff) AT=60
+meas ac gain_150hz FIND vdb(vdiff) AT=150
+meas ac peak_gain  MAX  vdb(vdiff) from=1 to=1k
+meas ac bw_3db WHEN vdb(vdiff)='peak_gain-3' FALL=1
 
 set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/ac_response gain_db title "Differential Gain (dB) vs Frequency" ylabel "Gain (dB)" xlabel "Frequency (Hz)"
+gnuplot {PLOTS_DIR}/ac_response gain_db title "Diff Gain (dB)" ylabel "dB" xlabel "Hz"
 
-print gain_1hz gain_60hz gain_150hz midband_gain bw_3db
+print gain_1hz gain_60hz gain_150hz peak_gain bw_3db
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist)
-    print(output[-2000:] if len(output) > 2000 else output)
-
-    midband_gain = parse_measurement(output, "midband_gain")
-    bw = parse_measurement(output, "bw_3db")
-    gain_60 = parse_measurement(output, "gain_60hz")
-
-    results = {}
-    if midband_gain is not None:
-        print(f"  Midband gain = {midband_gain:.1f} dB")
-        results["midband_gain_db"] = midband_gain
-    if bw is not None:
-        print(f"  -3dB Bandwidth = {bw:.0f} Hz")
-        results["bandwidth_hz"] = bw
-    if gain_60 is not None:
-        print(f"  Gain at 60 Hz = {gain_60:.1f} dB")
-        results["gain_60hz_db"] = gain_60
-
-    return results if results else None
+""")
+    out = run_ngspice(net)
+    print(out[-2000:])
+    r = {}
+    for k in ["gain_1hz", "gain_60hz", "gain_150hz", "peak_gain", "bw_3db"]:
+        v = grab(out, k)
+        if v is not None:
+            r[k] = v
+            print(f"  {k} = {v:.4g}")
+    return r if r else None
 
 
+# ── TB3: CMRR ────────────────────────────────────────────────
 def tb3_cmrr():
-    """TB3: Common-Mode Rejection"""
-    print("\n" + "="*60)
-    print("TB3: Common-Mode Rejection Ratio")
-    print("="*60)
-
-    # First get differential gain, then common-mode gain
-    netlist_cm = f"""* TB3: CMRR - Common-mode response
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Common-mode AC input (same signal on both inputs)
-Vinp inp 0 DC 0.9 AC 1
-Vinn inn 0 DC 0.9 AC 1
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
+    print("\n>>> TB3: CMRR")
+    net = make_inamp(
+        ac_inp="1", ac_inn="1",
+        extra=f"""
 .ac dec 50 1 10k
 
 .control
 run
-
-let cm_gain_db = vdb(outp) - vdb(outn)
-let cm_out = v(outp) - v(outn)
-
-meas ac cm_gain_60hz find vdb(cm_out) at=60
+let vdiff = v(outp) - v(outn)
+let cm_gain_db = vdb(vdiff)
+meas ac cm_gain_60 FIND vdb(vdiff) AT=60
 
 set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/cmrr_vs_freq cm_gain_db title "Common-Mode Gain (dB)" ylabel "Gain (dB)" xlabel "Frequency (Hz)"
+gnuplot {PLOTS_DIR}/cmrr_vs_freq cm_gain_db title "CM-to-Diff Gain (dB)" ylabel "dB" xlabel "Hz"
 
-print cm_gain_60hz
+print cm_gain_60
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist_cm)
-    print(output[-2000:] if len(output) > 2000 else output)
-
-    cm_gain_60 = parse_measurement(output, "cm_gain_60hz")
-
-    if cm_gain_60 is not None:
-        # CMRR = diff_gain - cm_gain (both in dB)
-        # We'll use the diff gain from TB2, but for now compute from expected gain
-        # Actual CMRR needs differential gain measurement too
-        print(f"  CM gain at 60 Hz = {cm_gain_60:.1f} dB")
-        return {"cm_gain_60hz_db": cm_gain_60}
-    return None
+""")
+    out = run_ngspice(net)
+    print(out[-1500:])
+    cm60 = grab(out, "cm_gain_60")
+    if cm60 is not None:
+        print(f"  CM→Diff gain at 60 Hz = {cm60:.1f} dB")
+    return {"cm_gain_60_db": cm60} if cm60 is not None else None
 
 
+# ── TB4: Noise ────────────────────────────────────────────────
 def tb4_noise():
-    """TB4: Input-Referred Noise"""
-    print("\n" + "="*60)
-    print("TB4: Input-Referred Noise")
-    print("="*60)
-
-    netlist = f"""* TB4: Noise Analysis
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Input for noise analysis - AC source for transfer function
-Vinp inp 0 DC 0.9 AC 0.5
-Vinn inn 0 DC 0.9 AC -0.5
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
-.noise v(outp,outn) Vinp dec 50 0.1 10k
+    print("\n>>> TB4: Input-Referred Noise (0.5–150 Hz)")
+    net = make_inamp(
+        ac_inp="1", ac_inn="0",
+        extra=f"""
+* Noise analysis over the biosignal band
+.noise v(outp,outn) Vip dec 100 0.5 150
 
 .control
 run
-
 setplot noise1
-let onoise_density = onoise_spectrum
 set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/noise_spectral_density onoise_density title "Output Noise Spectral Density" ylabel "V/sqrt(Hz)" xlabel "Frequency (Hz)"
+gnuplot {PLOTS_DIR}/noise_spectral_density onoise_spectrum title "Output Noise (V/rtHz)" ylabel "V/rtHz" xlabel "Hz"
 
-* Integrate noise from 0.5 to 150 Hz
 setplot noise2
-print onoise_total
-
+print onoise_total inoise_total
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist)
-    print(output[-2000:] if len(output) > 2000 else output)
+""")
+    out = run_ngspice(net)
+    print(out[-1500:])
+    inoise = grab(out, "inoise_total")
+    onoise = grab(out, "onoise_total")
+    if inoise is not None:
+        print(f"  Input-referred noise (0.5-150 Hz) = {inoise*1e6:.3f} µVrms")
+    if onoise is not None:
+        print(f"  Output noise (0.5-150 Hz) = {onoise*1e6:.3f} µVrms")
+    return {"inoise_total": inoise, "onoise_total": onoise} if inoise is not None else None
 
-    # Parse total output noise
-    total_noise = parse_measurement(output, "onoise_total")
-    if total_noise is not None:
-        print(f"  Total output noise (integrated) = {total_noise*1e6:.3f} µV")
-        # Need gain to refer to input - will compute in scoring
-        return {"output_noise_vrms": total_noise}
-    return None
 
-
+# ── TB5: Offset ───────────────────────────────────────────────
 def tb5_offset():
-    """TB5: Input Offset"""
-    print("\n" + "="*60)
-    print("TB5: Input Offset")
-    print("="*60)
-
-    netlist = f"""* TB5: Input Offset Measurement
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Zero differential input
-Vinp inp 0 DC 0.9
-Vinn inn 0 DC 0.9
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
-.tran 1m 2 uic
+    print("\n>>> TB5: Input Offset")
+    net = make_inamp(
+        extra=f"""
+.tran 1m 1
 
 .control
 run
-
-let vout_diff = v(outp) - v(outn)
-let final_offset_out = vout_diff[length(vout_diff)-1]
-print final_offset_out
-
+let vdiff = v(outp) - v(outn)
+let vfinal = vdiff[length(vdiff)-1]
+print vfinal
 set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/offset_measurement vout_diff title "Output Offset (zero input)" ylabel "Voltage (V)" xlabel "Time (s)"
-
+gnuplot {PLOTS_DIR}/offset_measurement vdiff title "Output (zero input)" ylabel "V" xlabel "s"
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist)
-    print(output[-2000:] if len(output) > 2000 else output)
-
-    offset_out = parse_measurement(output, "final_offset_out")
-    if offset_out is not None:
-        print(f"  Output offset = {offset_out*1000:.3f} mV")
-        return {"output_offset_v": offset_out}
+""")
+    out = run_ngspice(net, timeout=180)
+    print(out[-1000:])
+    v = grab(out, "vfinal")
+    if v is not None:
+        print(f"  Output offset = {v*1000:.3f} mV")
+        return {"output_offset_v": v}
     return None
 
 
-def tb6_electrode_offset():
-    """TB6: Electrode Offset Tolerance"""
-    print("\n" + "="*60)
-    print("TB6: Electrode Offset Tolerance")
-    print("="*60)
-
+# ── TB6: Electrode offset ────────────────────────────────────
+def tb6_electrode():
+    print("\n>>> TB6: Electrode Offset Tolerance")
     results = {}
-    for offset_mv in [300, -300]:
-        vcm = 0.9 + offset_mv/1000.0
-        vin_diff = 0.001  # 1mV
-
-        netlist = f"""* TB6: Electrode Offset = {offset_mv} mV
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-* Input with electrode offset
-Vinp inp 0 DC {vcm + vin_diff/2}
-Vinn inn 0 DC {vcm - vin_diff/2}
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
-.tran 1m 2 uic
+    for eoff_mv in [300, -300]:
+        vcm_in = 0.9 + eoff_mv / 1000.0
+        net = make_inamp(
+            vcm_inp=vcm_in + 0.0005,
+            vcm_inn=vcm_in - 0.0005,
+            extra=f"""
+.tran 1m 1
 
 .control
 run
-
-let vout_diff = v(outp) - v(outn)
-let final_vout = vout_diff[length(vout_diff)-1]
-let final_voutp = v(outp)[length(v(outp))-1]
-let final_voutn = v(outn)[length(v(outn))-1]
-print final_vout final_voutp final_voutn
-
+let vdiff = v(outp) - v(outn)
+let t_len = length(vdiff) - 1
+let vfinal = vdiff[t_len]
+let voutp_f = v(outp)[t_len]
+let voutn_f = v(outn)[t_len]
+print vfinal voutp_f voutn_f
 quit
 .endc
 .end
-"""
-        output = run_ngspice(netlist)
-        vout = parse_measurement(output, "final_vout")
-        voutp = parse_measurement(output, "final_voutp")
-        voutn = parse_measurement(output, "final_voutn")
-
-        if vout is not None:
-            gain = abs(vout) / vin_diff
+""")
+        out = run_ngspice(net, timeout=180)
+        vdiff = grab(out, "vfinal")
+        voutp = grab(out, "voutp_f")
+        voutn = grab(out, "voutn_f")
+        if vdiff is not None:
+            gain = abs(vdiff) / 0.001
             gain_db = 20 * math.log10(max(gain, 1e-10))
-            print(f"  Offset {offset_mv:+d} mV: Vout_diff = {vout*1000:.3f} mV, Gain = {gain_db:.1f} dB")
-            print(f"    Voutp = {voutp:.4f} V, Voutn = {voutn:.4f} V")
-            if voutp < 0.2 or voutp > 1.6 or voutn < 0.2 or voutn > 1.6:
-                print(f"    WARNING: Output saturated!")
-            results[f"gain_db_offset_{offset_mv}mv"] = gain_db
-
+            sat = (voutp is not None and (voutp < 0.2 or voutp > 1.6)) or \
+                  (voutn is not None and (voutn < 0.2 or voutn > 1.6))
+            print(f"  Off {eoff_mv:+d}mV: Vdiff={vdiff*1000:.2f}mV gain={gain_db:.1f}dB sat={'YES' if sat else 'no'}")
+            if voutp is not None:
+                print(f"    Voutp={voutp:.4f} Voutn={voutn:.4f}")
+            results[f"off{eoff_mv}_gain_db"] = gain_db
+            results[f"off{eoff_mv}_sat"] = sat
     return results if results else None
 
 
-def compute_power():
-    """Compute total power consumption."""
-    print("\n" + "="*60)
-    print("Power Consumption")
-    print("="*60)
-
-    netlist = f"""* Power measurement
-.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
-
-.param vdd_val = 1.8
-.param vcm_val = 0.9
-.param ibias_val = 2u
-.param wp_in = 50u
-.param lp_in = 2u
-.param wn_load = 5u
-.param ln_load = 2u
-.param wp_tail = 10u
-.param lp_tail = 2u
-.param wp_cas = 5u
-.param lp_cas = 1u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param cin_val = 10p
-.param cfb_val = 200f
-.param rpseudo = 100G
-
-VDD vdd 0 {{vdd_val}}
-
-Ibias vdd nbias {{ibias_val}}
-Xbias_n nbias nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Vinp inp 0 DC 0.9
-Vinn inn 0 DC 0.9
-
-Cin_p inp inn_p {{cin_val}}
-Cin_n inn inn_n {{cin_val}}
-
-Rbias_p vcm_node inn_p {{rpseudo}}
-Rbias_n vcm_node inn_n {{rpseudo}}
-Vcm_bias vcm_node 0 {{vcm_val}}
-
-Cfb_p outp inn_p {{cfb_val}}
-Cfb_n outn inn_n {{cfb_val}}
-
-Xp_tail_bias ptail_bias ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-Ip_tail_ref vdd ptail_bias {{ibias_val*2}}
-Xp_tail tail ptail_bias vdd vdd sky130_fd_pr__pfet_01v8 w={{wp_tail}} l={{lp_tail}}
-
-Xp_in1 pd1 inn_n tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-Xp_in2 pd2 inn_p tail vdd sky130_fd_pr__pfet_01v8 w={{wp_in}} l={{lp_in}}
-
-Xn_load1 nd1 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-Xn_load2 nd2 nbias 0 0 sky130_fd_pr__nfet_01v8 w={{wn_load}} l={{ln_load}}
-
-Xn_cas1 outn ncas_bias nd1 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xn_cas2 outp ncas_bias nd2 0 sky130_fd_pr__nfet_01v8 w={{wn_cas}} l={{ln_cas}}
-Xp_cas1 outn pcas_bias pd1 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-Xp_cas2 outp pcas_bias pd2 vdd sky130_fd_pr__pfet_01v8 w={{wp_cas}} l={{lp_cas}}
-
-Vncas ncas_bias 0 0.7
-Vpcas pcas_bias 0 1.0
-
-Ecmfb vcm_sense 0 vol='(v(outp)+v(outn))/2'
-Gcmfb outp outn vcm_sense vcm_node 10u
-
-CL_p outp 0 1p
-CL_n outn 0 1p
-
+# ── Power ─────────────────────────────────────────────────────
+def measure_power():
+    print("\n>>> Power Consumption")
+    net = make_inamp(
+        extra="""
 .op
 
 .control
 run
-let ivdd = @VDD[i]
-let power_uw = -ivdd * 1.8 * 1e6
-print ivdd power_uw
+let idd = -@VDD[i]
+let pwr = idd * 1.8 * 1e6
+print idd pwr
 quit
 .endc
 .end
-"""
-    output = run_ngspice(netlist)
-    print(output[-1500:] if len(output) > 1500 else output)
-
-    power = parse_measurement(output, "power_uw")
-    ivdd = parse_measurement(output, "ivdd")
-
-    if power is not None:
-        print(f"  Supply current = {abs(ivdd)*1e6:.2f} µA")
-        print(f"  Power = {abs(power):.2f} µW")
-        return {"power_uw": abs(power), "ivdd_ua": abs(ivdd)*1e6}
+""")
+    out = run_ngspice(net)
+    print(out[-1000:])
+    pwr = grab(out, "pwr")
+    idd = grab(out, "idd")
+    if pwr is not None:
+        print(f"  Isupply={abs(idd)*1e6:.2f} µA  Power={abs(pwr):.2f} µW")
+        return {"power_uw": abs(pwr), "idd_ua": abs(idd) * 1e6}
     return None
 
 
-def score_results(measurements):
-    """Score measurements against specs."""
-    print("\n" + "="*60)
+# ── Scoring ───────────────────────────────────────────────────
+def score_results(meas):
+    print("\n" + "=" * 60)
     print("SCORING")
-    print("="*60)
+    print("=" * 60)
+    sdefs = specs["measurements"]
+    total_w = sum(s["weight"] for s in sdefs.values())
+    got_w = 0; n_pass = 0; n_total = len(sdefs)
 
-    spec_defs = specs["measurements"]
-    total_weight = sum(s["weight"] for s in spec_defs.values())
-    weighted_score = 0
-    specs_met = 0
-    total_specs = len(spec_defs)
-    results_table = []
-
-    for name, spec in spec_defs.items():
-        target = spec["target"]
-        weight = spec["weight"]
-        measured = measurements.get(name)
-
-        if measured is None:
-            status = "MISSING"
-            passed = False
+    for name, s in sdefs.items():
+        tgt = s["target"]; w = s["weight"]
+        val = meas.get(name)
+        if val is None:
+            status = "MISS"; passed = False
         else:
-            if target.startswith(">"):
-                threshold = float(target[1:])
-                passed = measured > threshold
-            elif target.startswith("<"):
-                threshold = float(target[1:])
-                passed = measured < threshold
+            if tgt.startswith(">"):
+                passed = val > float(tgt[1:])
+            elif tgt.startswith("<"):
+                passed = val < float(tgt[1:])
             else:
-                threshold = float(target)
-                passed = abs(measured - threshold) < 0.1 * abs(threshold)
-
+                passed = False
             status = "PASS" if passed else "FAIL"
-
         if passed:
-            weighted_score += weight
-            specs_met += 1
+            got_w += w; n_pass += 1
+        vs = f"{val:.4g}" if val is not None else "N/A"
+        print(f"  {name:35s} tgt={tgt:>8s}  val={vs:>12s}  [{status}] w={w}")
 
-        measured_str = f"{measured:.4g}" if measured is not None else "N/A"
-        results_table.append((name, target, measured_str, status, weight))
-        print(f"  {name:35s} target={target:>10s}  measured={measured_str:>12s}  [{status}] (w={weight})")
-
-    score = weighted_score / total_weight
-    print(f"\n  Score: {score:.4f} ({specs_met}/{total_specs} specs met)")
-    print(f"  Weighted: {weighted_score}/{total_weight}")
-
-    return score, specs_met, total_specs
+    sc = got_w / total_w
+    print(f"\n  Score: {sc:.4f}  ({n_pass}/{n_total} pass)")
+    return sc, n_pass, n_total
 
 
+# ── Main ──────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("SKY130 Instrumentation Amplifier — Evaluation")
+    print("SKY130 InAmp — Folded-Cascode CCIA Evaluation")
     print("=" * 60)
 
-    measurements = {}
+    meas = {}
 
-    # TB1: DC Gain
-    tb1 = tb1_dc_gain()
-    if tb1:
-        measurements["gain_db"] = tb1.get("gain_db", 0)
+    # TB1: DC Gain (transient)
+    r = tb1_dc_gain()
+    if r:
+        meas["gain_db"] = r["gain_db"]
 
-    # TB2: AC Response
-    tb2 = tb2_ac_response()
-    if tb2:
-        if "bandwidth_hz" in tb2:
-            measurements["bandwidth_hz"] = tb2["bandwidth_hz"]
-        if "midband_gain_db" in tb2:
-            # Use AC midband gain as more reliable
-            measurements["gain_db"] = tb2["midband_gain_db"]
+    # TB2: AC Response (most reliable gain measurement)
+    r = tb2_ac()
+    if r:
+        if "peak_gain" in r:
+            meas["gain_db"] = r["peak_gain"]
+        if "bw_3db" in r:
+            meas["bandwidth_hz"] = r["bw_3db"]
+
+    diff_gain_db = meas.get("gain_db", 0)
 
     # TB3: CMRR
-    tb3 = tb3_cmrr()
-    diff_gain_db = measurements.get("gain_db", 34)
-    if tb3 and "cm_gain_60hz_db" in tb3:
-        cm_gain = tb3["cm_gain_60hz_db"]
-        cmrr = diff_gain_db - cm_gain
-        measurements["cmrr_60hz_db"] = cmrr
-        print(f"  CMRR at 60 Hz = {diff_gain_db:.1f} - ({cm_gain:.1f}) = {cmrr:.1f} dB")
+    r = tb3_cmrr()
+    if r and "cm_gain_60_db" in r:
+        cmrr = diff_gain_db - r["cm_gain_60_db"]
+        meas["cmrr_60hz_db"] = cmrr
+        print(f"  CMRR = {diff_gain_db:.1f} - ({r['cm_gain_60_db']:.1f}) = {cmrr:.1f} dB")
 
     # TB4: Noise
-    tb4 = tb4_noise()
-    if tb4 and "output_noise_vrms" in tb4:
-        gain_linear = 10**(diff_gain_db/20) if diff_gain_db > 0 else 50
-        input_noise = tb4["output_noise_vrms"] / gain_linear
-        measurements["input_referred_noise_uvrms"] = input_noise * 1e6
-        print(f"  Input-referred noise = {input_noise*1e6:.3f} µVrms")
+    r = tb4_noise()
+    if r and "inoise_total" in r:
+        meas["input_referred_noise_uvrms"] = r["inoise_total"] * 1e6
+        print(f"  Input-referred noise = {r['inoise_total']*1e6:.3f} µVrms")
 
     # TB5: Offset
-    tb5 = tb5_offset()
-    if tb5 and "output_offset_v" in tb5:
-        gain_linear = 10**(diff_gain_db/20) if diff_gain_db > 0 else 50
-        input_offset = abs(tb5["output_offset_v"]) / gain_linear
-        measurements["input_offset_uv"] = input_offset * 1e6
-        print(f"  Input-referred offset = {input_offset*1e6:.1f} µV")
+    r = tb5_offset()
+    if r:
+        gain_lin = 10 ** (diff_gain_db / 20) if diff_gain_db > 0 else 1
+        meas["input_offset_uv"] = abs(r["output_offset_v"]) / gain_lin * 1e6
+        print(f"  Input offset = {meas['input_offset_uv']:.1f} µV")
 
     # TB6: Electrode offset
-    tb6 = tb6_electrode_offset()
-    if tb6:
-        for k, v in tb6.items():
-            measurements[k] = v
+    tb6_electrode()
 
     # Power
-    pwr = compute_power()
-    if pwr:
-        measurements["power_uw"] = pwr["power_uw"]
+    r = measure_power()
+    if r:
+        meas["power_uw"] = r["power_uw"]
 
     # Score
-    score, specs_met, total_specs = score_results(measurements)
+    sc, n_pass, n_total = score_results(meas)
 
-    # Save measurements
-    with open(MEASUREMENTS_FILE, 'w') as f:
-        json.dump({"measurements": measurements, "score": score,
-                    "specs_met": specs_met, "total_specs": total_specs}, f, indent=2)
+    with open(MEASUREMENTS_FILE, "w") as f:
+        json.dump({"measurements": meas, "score": sc,
+                    "specs_met": n_pass, "total_specs": n_total}, f, indent=2)
 
-    print(f"\nscore = {score:.4f}")
-    print(f"specs_met = {specs_met}/{total_specs}")
-
-    return score
+    print(f"\nscore = {sc:.4f}")
+    print(f"specs_met = {n_pass}/{n_total}")
+    return sc
 
 
 if __name__ == "__main__":
-    score = main()
+    main()

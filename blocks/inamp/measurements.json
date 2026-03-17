@@ -1,0 +1,13 @@
+{
+  "measurements": {
+    "gain_db": 31.29076,
+    "bandwidth_hz": 4404814.0,
+    "cmrr_60hz_db": 311.20975999999996,
+    "input_referred_noise_uvrms": 39.66842590007332,
+    "input_offset_uv": 1.4279801471137322e-08,
+    "power_uw": 7.200003
+  },
+  "score": 0.6,
+  "specs_met": 4,
+  "total_specs": 6
+}

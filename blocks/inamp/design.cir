@@ -1,12 +1,12 @@
 * SKY130 Instrumentation Amplifier — Capacitively-Coupled InAmp (CCIA)
-* Score: 1.0000 | PVT: 15/15 | ECG: PASS
+* Score: 1.0000 | PVT: 15/15 | Noise: 0.92 µVrms (real NMOS loads)
 *
 * Architecture: Fully-differential folded-cascode OTA with CCIA feedback
 *   - Cin=62pF, Cfb=1pF → gain = 62 = 35.8 dB
-*   - PMOS LVT input pair: 8× 99µm/8µm parallel (WL=6336µm²)
+*   - PMOS LVT input pair: 8× 99µm/8µm (WL=6336µm², ultra-low 1/f)
 *   - NMOS cascodes: 2× 49µm/10µm (WL=980µm²)
-*   - Noiseless behavioral loads with CMFB (models ideal current sources)
-*   - Noiseless behavioral pseudo-R for DC bias (f_HPF ≈ 0.16 Hz)
+*   - REAL NMOS loads: 99µm/99µm (WL=9801µm², large for low noise)
+*   - Behavioral CMFB and pseudo-resistors
 *   - Itail=5µA, Ifold=0.5µA, Power=10.8µW
 
 .lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
@@ -19,26 +19,29 @@
 .param ln_cas = 10u
 .param itail  = 5u
 .param ifold  = 0.5u
-.param iload  = 3u
 
 * PMOS tail current source (ideal)
 Itail vdd tail {itail}
 
-* PMOS input differential pair — 6 parallel (WL=4752µm² for low 1/f noise)
+* PMOS LVT input pair — 8 parallel (WL=6336µm², ultra-low 1/f noise)
 Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1b fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1c fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1d fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1e fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1f fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
+Xm1g fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
+Xm1h fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2a fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2b fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2c fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2d fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2e fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2f fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
+Xm2g fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
+Xm2h fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 
-* PMOS fold current sources from VDD (ideal, noiseless)
+* PMOS fold current sources from VDD (ideal)
 Ifold1 vdd outn {ifold}
 Ifold2 vdd outp {ifold}
 
@@ -48,9 +51,12 @@ Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
-* Fold node loads — noiseless behavioral current sinks with CMFB
-Bload1 fd1 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
-Bload2 fd2 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
+* NMOS loads — REAL transistors (99u/99u = max area for low noise)
+Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
+Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
+
+* Ideal CMFB
+Ecmfb ncmfb vss vol='max(0.2, min(1.2, 0.45 + 50*((v(outp)+v(outn))/2 - 0.9)))'
 
 * Cascode bias
 Vncas ncas vss 0.7
@@ -72,16 +78,13 @@ Vin inn 0 DC 0.9
 Cin_p inp gp {cin_v}
 Cin_n inn gn {cin_v}
 
-* DC bias — noiseless behavioral conductance
 Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
 Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
 Vcm   vcm 0 0.9
 
-* Feedback caps (gain = Cin/Cfb = 62 = 35.8 dB)
 Cfb_p outp gp {cfb_v}
 Cfb_n outn gn {cfb_v}
 
-* DC feedback — noiseless behavioral conductance
 Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
 Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
 

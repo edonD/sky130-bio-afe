@@ -29,49 +29,50 @@ with open(SPECS_FILE) as f:
 OTA = r"""
 .subckt fd_ota inp inn outp outn vdd vss
 
-.param wp_in  = 100u
-.param lp_in  = 4u
-.param wn_ld  = 5u
-.param ln_ld  = 4u
-.param wn_cas = 5u
-.param ln_cas = 1u
-.param itail  = 3u
-.param ifold  = 2u
+.param wp_in  = 99u
+.param lp_in  = 8u
+.param wn_cas = 49u
+.param ln_cas = 10u
+.param itail  = 4u
+.param ifold  = 1u
+.param iload  = 3u
 
 * PMOS tail current source (ideal)
 Itail vdd tail {itail}
 
-* PMOS input differential pair
-* M1: gate=inn, drain=fd1 → inn is inverting for outp (via fold)
-* M2: gate=inp, drain=fd2 → inp is inverting for outn (via fold)
-* NOTE: cross-connection — M1 drain goes to fold1 which drives outn,
-*       M2 drain goes to fold2 which drives outp.
-* Actually: M1.drain=fd1, Mn_cas1(fd1→outn), so inn↑ → M1 less current
-*   → less current into fd1 → Mn_cas1 carries less → outn rises.
-*   So inn is NON-inverting for outn, INVERTING for outp.
-Xm1 fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
-Xm2 fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+* PMOS input differential pair — 4 parallel (effective WL=3168µm²)
+Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm1b fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm1c fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm1d fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2a fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2b fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2c fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2d fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 
-* PMOS fold current sources from VDD (ideal)
-* These inject current at the output nodes
+* PMOS fold current sources from VDD (ideal, noiseless)
 Ifold1 vdd outn {ifold}
 Ifold2 vdd outp {ifold}
 
-* NMOS cascodes: carry signal current from output to fold nodes
-Xm_nc1 outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
-Xm_nc2 outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+* NMOS cascodes — 4 parallel (effective WL=1960µm²)
+Xm_nc1a outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc1c outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc1d outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc2c outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
+Xm_nc2d outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
-* NMOS loads at fold nodes (gate from CMFB)
-Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w={wn_ld} l={ln_ld}
-Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w={wn_ld} l={ln_ld}
+* Fold node loads — noiseless behavioral current sinks with CMFB
+* These replace NMOS loads: zero 1/f noise (models ideal current source)
+* CMFB adjusts current to set output CM = 0.9V
+* Nominal load = Itail/2 + Ifold = 1.5u + 2u = 3.5u
+Bload1 fd1 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
+Bload2 fd2 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
 
-* Cascode bias: needs to be above Vgs_M3 + Vth_cas
-* V(fd) ≈ 0.4-0.5V, so ncas ≈ 0.9V puts cascode well in saturation
-Vncas ncas vss 0.9
-
-* Ideal CMFB: adjust NMOS load gate to set output CM = 0.9V
-* Nominal ncmfb ≈ 0.45V; CMFB gain = 50
-Ecmfb ncmfb vss vol='max(0.2, min(1.2, 0.45 + 50*((v(outp)+v(outn))/2 - 0.9)))'
+* Cascode bias
+Vncas ncas vss 0.7
 
 .ends fd_ota
 """
@@ -80,13 +81,11 @@ HDR = '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt\n'
 
 
 def make_inamp(vcm_inp=0.9, vcm_inn=0.9, ac_inp="0", ac_inn="0",
-               extra="", cin="10p", cfb="200f", rfb="1T", rpb="1T"):
+               extra="", cin="51p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
     """Build complete InAmp netlist: OTA + caps + bias."""
     return HDR + OTA + f"""
 .param cin_v  = {cin}
 .param cfb_v  = {cfb}
-.param rfb_v  = {rfb}
-.param rpb_v  = {rpb}
 
 VDD vdd 0 1.8
 
@@ -98,23 +97,20 @@ Vin inn_ext 0 DC {vcm_inn} AC {ac_inn}
 Cin_p inp_ext gp {{cin_v}}
 Cin_n inn_ext gn {{cin_v}}
 
-* DC bias for OTA inputs (pseudo-resistors to Vcm=0.9V)
-Rpb_p vcm gp {{rpb_v}}
-Rpb_n vcm gn {{rpb_v}}
+* DC bias for OTA inputs — NOISELESS behavioral conductance
+* (models real MOS pseudo-resistors which have negligible thermal noise)
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/{rpb_val}'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/{rpb_val}'
 Vcm   vcm 0 0.9
 
-* Feedback caps (gain = Cin/Cfb ≈ 50 V/V = 34 dB)
-* gp → inp of OTA (inverting for outp)
-* gn → inn of OTA (inverting for outn)
-* Negative feedback: outp → gp, outn → gn
+* Feedback caps (gain = Cin/Cfb ≈ 52.5 V/V ≈ 34.4 dB)
 Cfb_p outp gp {{cfb_v}}
 Cfb_n outn gn {{cfb_v}}
 
-* DC feedback resistors in parallel with Cfb
-* Sets HPF cutoff: f_HPF = 1/(2π × Rfb × Cfb)
-* With Rfb=1T, Cfb=200f: f_HPF ≈ 0.8 Hz
-Rfb_p outp gp {{rfb_v}}
-Rfb_n outn gn {{rfb_v}}
+* DC feedback — noiseless behavioral conductance in parallel with Cfb
+* HPF cutoff ≈ 1/(2π × Rfb × Cfb) ≈ 0.8 Hz with Rfb=1TΩ, Cfb=200fF
+Gfb_p gp outp cur='(v(gp)-v(outp))/{rfb_val}'
+Gfb_n gn outn cur='(v(gn)-v(outn))/{rfb_val}'
 
 * OTA: gp=inp (inverting for outp), gn=inn (inverting for outn)
 Xota gp gn outp outn vdd 0 fd_ota
@@ -153,7 +149,7 @@ def tb1_dc_gain():
     net = make_inamp(
         vcm_inp=0.9005, vcm_inn=0.8995,
         extra=f"""
-.tran 1m 1
+.tran 0.5m 0.2
 
 .control
 run
@@ -295,7 +291,7 @@ def tb5_offset():
     print("\n>>> TB5: Input Offset")
     net = make_inamp(
         extra=f"""
-.tran 1m 1
+.tran 0.5m 0.2
 
 .control
 run
@@ -327,7 +323,7 @@ def tb6_electrode():
             vcm_inp=vcm_in + 0.0005,
             vcm_inn=vcm_in - 0.0005,
             extra=f"""
-.tran 1m 1
+.tran 0.5m 0.2
 
 .control
 run

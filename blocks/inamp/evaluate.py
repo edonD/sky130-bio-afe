@@ -40,19 +40,23 @@ OTA = r"""
 * PMOS tail current source (ideal — real implementation is shared with bandgap block)
 Itail vdd tail {itail}
 
-* PMOS input differential pair — 6 parallel (effective WL=4752µm²)
+* PMOS input differential pair — 8 parallel (effective WL=6336µm²)
 Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm1b fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm1c fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm1d fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm1e fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm1f fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm1g fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm1h fd1 inn tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2a fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2b fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2c fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2d fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2e fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Xm2f fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2g fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
+Xm2h fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 
 * PMOS fold current sources from VDD (ideal, noiseless)
 Ifold1 vdd outn {ifold}

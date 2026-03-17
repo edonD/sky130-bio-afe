@@ -656,7 +656,7 @@ def main():
             'measurements': measurements,
             'score': final_score,
             'specs_met': f"{specs_met}/{total_specs}",
-            'details': {k: {'value': v['value'], 'target': v['target'], 'pass': v['pass']}
+            'details': {k: {'value': v['value'], 'target': v['target'], 'pass': bool(v['pass'])}
                        for k, v in results.items()},
         }, f, indent=2)
 

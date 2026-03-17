@@ -41,9 +41,9 @@ Xbias_p2 nbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=4u
 * PMOS current mirror load
 XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
 XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
-* NMOS differential pair
-XM1 s1mir inp tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
-XM2 s1out inn tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
+* NMOS differential pair (inp on output side = non-inverting)
+XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
+XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
 * NMOS tail current source (~500 nA)
 XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 

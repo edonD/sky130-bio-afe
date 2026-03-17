@@ -81,7 +81,7 @@ HDR = '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt\n'
 
 
 def make_inamp(vcm_inp=0.9, vcm_inn=0.9, ac_inp="0", ac_inn="0",
-               extra="", cin="51p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
+               extra="", cin="60p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
     """Build complete InAmp netlist: OTA + caps + bias."""
     return HDR + OTA + f"""
 .param cin_v  = {cin}
@@ -472,7 +472,130 @@ def main():
 
     print(f"\nscore = {sc:.4f}")
     print(f"specs_met = {n_pass}/{n_total}")
+
+    # Phase B: PVT corners if score = 1.0
+    if sc >= 1.0:
+        tb8_pvt_corners()
+
     return sc
+
+
+# ── TB8: PVT Corner Analysis ─────────────────────────────────
+def tb8_pvt_corners():
+    """Run gain and noise at all PVT corners."""
+    print("\n" + "=" * 60)
+    print("TB8: PVT CORNER ANALYSIS")
+    print("=" * 60)
+
+    corners = ["tt", "ss", "ff", "sf", "fs"]
+    temps = [-40, 27, 125]
+    results = []
+
+    for corner in corners:
+        for temp in temps:
+            hdr_pvt = f'.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" {corner}\n'
+            # AC gain + BW at this corner/temp
+            net = hdr_pvt + OTA + f"""
+.param cin_v  = 60p
+.param cfb_v  = 1p
+.temp {temp}
+
+VDD vdd 0 1.8
+Vip inp_ext 0 DC 0.9 AC 0.5
+Vin inn_ext 0 DC 0.9 AC -0.5
+Cin_p inp_ext gp {{cin_v}}
+Cin_n inn_ext gn {{cin_v}}
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
+Vcm vcm 0 0.9
+Cfb_p outp gp {{cfb_v}}
+Cfb_n outn gn {{cfb_v}}
+Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
+Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
+Xota gp gn outp outn vdd 0 fd_ota
+CL_p outp 0 1p
+CL_n outn 0 1p
+.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
+
+.ac dec 50 0.01 100Meg
+
+.control
+run
+let vdiff = v(outp) - v(outn)
+meas ac peak_gain MAX vdb(vdiff) from=1 to=1k
+meas ac bw_3db WHEN vdb(vdiff)='peak_gain-3' FALL=1
+print peak_gain bw_3db
+quit
+.endc
+.end
+"""
+            out = run_ngspice(net)
+            gain = grab(out, "peak_gain")
+            bw = grab(out, "bw_3db")
+
+            # Noise at this corner
+            net_noise = hdr_pvt + OTA + f"""
+.param cin_v  = 60p
+.param cfb_v  = 1p
+.temp {temp}
+
+VDD vdd 0 1.8
+Vip inp_ext 0 DC 0.9 AC 1
+Vin inn_ext 0 DC 0.9
+Cin_p inp_ext gp {{cin_v}}
+Cin_n inn_ext gn {{cin_v}}
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
+Vcm vcm 0 0.9
+Cfb_p outp gp {{cfb_v}}
+Cfb_n outn gn {{cfb_v}}
+Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
+Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
+Xota gp gn outp outn vdd 0 fd_ota
+CL_p outp 0 1p
+CL_n outn 0 1p
+.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
+
+.noise v(outp,outn) Vip dec 100 0.5 150
+
+.control
+run
+setplot noise2
+print inoise_total
+quit
+.endc
+.end
+"""
+            out_n = run_ngspice(net_noise)
+            inoise = grab(out_n, "inoise_total")
+
+            noise_uv = inoise * 1e6 if inoise else None
+            gain_pass = gain is not None and gain > 34
+            noise_pass = noise_uv is not None and noise_uv < 1.5
+            status = "PASS" if (gain_pass and noise_pass) else "FAIL"
+
+            g_str = f"{gain:.1f}" if gain else "N/A"
+            n_str = f"{noise_uv:.2f}" if noise_uv else "N/A"
+            bw_str = f"{bw/1e6:.2f}M" if bw else "N/A"
+
+            print(f"  {corner:3s} {temp:+4d}°C: gain={g_str:>6s}dB  noise={n_str:>6s}µV  BW={bw_str:>8s}  [{status}]")
+            results.append({
+                "corner": corner, "temp": temp,
+                "gain_db": gain, "noise_uvrms": noise_uv, "bw_hz": bw,
+                "pass": status == "PASS"
+            })
+
+    n_pass = sum(1 for r in results if r["pass"])
+    n_total = len(results)
+    print(f"\n  PVT: {n_pass}/{n_total} corners pass")
+
+    # Save summary
+    with open(f"{PLOTS_DIR}/pvt_summary.txt", "w") as f:
+        f.write("corner temp gain_db noise_uvrms bw_hz pass\n")
+        for r in results:
+            f.write(f"{r['corner']} {r['temp']} {r['gain_db']} {r['noise_uvrms']} {r['bw_hz']} {r['pass']}\n")
+
+    return results
 
 
 if __name__ == "__main__":

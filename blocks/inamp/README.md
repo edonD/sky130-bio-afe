@@ -1,6 +1,6 @@
 # SKY130 Instrumentation Amplifier
 
-**Status: PHASE A COMPLETE — Score 1.0000 (6/6 specs pass)**
+**Status: PHASE B — Score 1.0000 (6/6 specs pass), PVT 15/15 corners pass**
 
 ## Architecture
 
@@ -22,14 +22,27 @@ Electrode- → [Cin 51pF] → gn → OTA(inv-) → outn → [Cfb 1pF] → gn (fe
 
 ## Measured vs Target
 
-| Parameter | Target | Measured | Status | Margin |
-|-----------|--------|----------|--------|--------|
-| Gain | >34 dB | 34.14 dB | PASS | +0.14 dB |
-| Input noise (0.5-150 Hz) | <1.5 µVrms | 1.40 µVrms | PASS | 7% margin |
-| CMRR at 60 Hz | >100 dB | 259.8 dB | PASS | large (ideal matching) |
+| Parameter | Target | Measured (tt,27°C) | Status | Margin |
+|-----------|--------|---------------------|--------|--------|
+| Gain | >34 dB | 35.55 dB | PASS | +1.55 dB |
+| Input noise (0.5-150 Hz) | <1.5 µVrms | 1.36 µVrms | PASS | 9% margin |
+| CMRR at 60 Hz | >100 dB | 267 dB | PASS | large (ideal matching) |
 | Input offset | <50 µV | ~0 µV | PASS | (ideal symmetry) |
-| Bandwidth | >10 kHz | 2.82 MHz | PASS | 282× |
+| Bandwidth | >10 kHz | 2.92 MHz | PASS | 292× |
 | Power | <15 µW | 10.8 µW | PASS | 28% margin |
+
+## PVT Corner Summary (15/15 pass)
+
+| Corner | -40°C | 27°C | 125°C |
+|--------|-------|------|-------|
+| tt | 1.20 µV PASS | 1.36 µV PASS | 1.48 µV PASS |
+| ss | 1.23 µV PASS | 1.38 µV PASS | 1.46 µV PASS |
+| ff | 1.17 µV PASS | 1.34 µV PASS | 1.49 µV PASS |
+| sf | 1.23 µV PASS | 1.37 µV PASS | 1.44 µV PASS |
+| fs | 1.17 µV PASS | 1.34 µV PASS | 1.50 µV PASS |
+
+Gain is 35.6 dB at all corners (Cin/Cfb = 60, independent of process/temp).
+Worst-case noise: 1.50 µVrms at fs/125°C (barely passing).
 
 ## Plots
 
@@ -47,12 +60,12 @@ The CCIA topology was chosen because it:
 2. Achieves precise gain (Cin/Cfb) independent of OTA open-loop gain
 3. With fully-differential output, provides inherent high CMRR
 
-### Why large Cin (51pF)?
+### Why large Cin (60pF)?
 This was the critical noise optimization. The input-referred noise of a CCIA is:
 
 Vn_input ∝ (Cin + Cfb + Cgs_pair) / Cin × √(Kf / (Cox × WL × f))
 
-With small Cin (~10pF), the parasitic Cgs (~18pF for the large input pair) dominates the numerator, amplifying OTA noise by ~2.7×. Increasing Cin to 51pF reduces the noise gain to ~1.5×, achieving the 1.5 µVrms target.
+With small Cin (~10pF), the parasitic Cgs (~18pF for the large input pair) dominates the numerator, amplifying OTA noise by ~2.7×. Increasing Cin to 60pF reduces the noise gain to ~1.4×, achieving <1.5 µVrms across all PVT corners.
 
 ### Why noiseless loads?
 Real NMOS loads contribute significant 1/f noise (NMOS Kf ~10× PMOS Kf). Using behavioral current sources eliminates this. In silicon, this would be implemented with PMOS current mirrors or chopper-stabilized biasing.
@@ -63,15 +76,15 @@ Real NMOS loads contribute significant 1/f noise (NMOS Kf ~10× PMOS Kf). Using 
 - Total: 6 µA × 1.8V = 10.8 µW
 
 ## System Interface Check
-Output CM = 0.9V. With 1mV ECG × 51 gain = 51 mV differential swing. Output stays at 0.9V ± 25.5 mV (0.875V to 0.925V). Well within PGA input range (0.2-1.6V).
+Output CM = 0.9V. With 1mV ECG × 60 gain = 60 mV differential swing. Output stays at 0.9V ± 30 mV (0.870V to 0.930V). Well within PGA input range (0.2-1.6V).
 
 ## Known Limitations
-1. **CMRR is unrealistically high** (260 dB): in simulation with ideal matched components, CMRR approaches infinity. Real silicon would have CMRR ~80-100 dB from mismatch. Need Monte Carlo (Phase B).
-2. **Offset is zero**: same reason — perfect symmetry in simulation.
-3. **Gain margin is thin** (+0.14 dB): close to the 34 dB boundary. May fail at corners.
-4. **Noise margin is thin** (7%): 1.40 vs 1.50 µVrms. May fail at corners.
-5. **Noiseless loads are idealized**: real current source loads would add noise.
-6. **No transient verification** of electrode offset rejection yet (HPF settling too slow for short sims).
+1. **CMRR is unrealistically high** (267 dB): ideal matching in sim. Real silicon ~80-100 dB from mismatch.
+2. **Offset is zero**: perfect symmetry in simulation. Real offset from mismatch.
+3. **Noiseless loads are idealized**: real current source loads would add noise.
+4. **Noise margin at hot corner is thin**: fs/125°C noise = 1.50 µVrms (barely passing).
+5. **No transient verification** of electrode offset rejection yet.
+6. **60pF input caps are large**: ~220µm × 220µm each in SKY130 MIM. Feasible but significant area.
 
 ## Failed Ideas
 1. **Simple 5T OTA** — insufficient open-loop gain for accurate Cin/Cfb
@@ -91,3 +104,5 @@ Output CM = 0.9V. With 1mV ECG × 51 gain = 51 mV differential swing. Output sta
 | 5 | 0.75 | Larger devices — noise 2.3 µVrms |
 | 6 | 0.85 | Cin=50pF — noise 1.4 µVrms passes! Gain 33.97 fails |
 | 7 | 1.00 | Cin=51pF — all specs pass |
+| 8 | 1.00 | Cin=55pF — 13/15 PVT pass (ff/fs @125°C fail noise) |
+| 9 | 1.00 | Cin=60pF — 15/15 PVT pass! Gain=35.6dB, noise=1.36µV |

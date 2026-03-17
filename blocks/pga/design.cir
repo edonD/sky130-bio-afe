@@ -1,0 +1,76 @@
+* PGA - Programmable Gain Amplifier (Baseline)
+* SKY130 Process, 1.8V supply
+* Inverting topology with two-stage Miller opamp
+* Gains: 1, 2, 4, 8, 16, 32, 64, 128
+
+.lib "sky130_models/sky130.lib.spice" tt
+
+** Parameters (overridden by evaluate.py)
+.param gain_val = 1
+.param rf_val = 100k
+.param rin_val = {rf_val / gain_val}
+.param vcm = 0.9
+.param ibias_val = 2u
+
+** Supply
+Vdd vdd 0 1.8
+Vss vss 0 0
+
+** Common-mode reference
+Vcm vcm_node 0 {vcm}
+
+**============================================================
+** Two-Stage Miller Compensated CMOS Opamp
+**============================================================
+.subckt opamp inp inn out vdd vss
+
+* ---- Bias generation ----
+* Ideal current source for baseline (will replace with mirror later)
+Ibias vdd pbias {ibias_val}
+XMp_diode pbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u m=1
+
+* NMOS bias mirror (for second stage load reference)
+XMn_diode nbias pbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
+XMn_bias  nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
+
+* ---- First stage: PMOS diff pair + NMOS active load ----
+* Tail current source (2x bias = 2*ibias for diff pair)
+XM5 tail pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u m=2
+
+* PMOS differential pair
+XM1 d1 inp tail vdd sky130_fd_pr__pfet_01v8 w=8u l=1u m=1
+XM2 d2 inn tail vdd sky130_fd_pr__pfet_01v8 w=8u l=1u m=1
+
+* NMOS active load (current mirror)
+XM3 d1 d1 vss vss sky130_fd_pr__nfet_01v8 w=2u l=1u m=1
+XM4 d2 d1 vss vss sky130_fd_pr__nfet_01v8 w=2u l=1u m=1
+
+* ---- Second stage: NMOS CS amplifier ----
+XM7 out pbias vdd vdd sky130_fd_pr__pfet_01v8 w=8u l=1u m=1
+XM6 out d2   vss vss sky130_fd_pr__nfet_01v8 w=8u l=0.5u m=1
+
+* ---- Miller compensation ----
+* MIM cap ~2 pF (Cc) + nulling resistor (Rz)
+XCc d2 cc_mid sky130_fd_pr__cap_mim_m3_1 w=30u l=30u m=1
+Rz  cc_mid out 2k
+
+.ends opamp
+
+**============================================================
+** PGA Circuit - Inverting Configuration
+**============================================================
+
+* Opamp instance
+X1 vcm_node vminus vout vdd vss opamp
+
+* Feedback network
+* Rf: fixed feedback resistor
+Rf vminus vout {rf_val}
+
+* Rin: gain-setting input resistor (Gain = Rf/Rin)
+Rin vin vminus {rin_val}
+
+* Input source (overridden by testbench)
+Vin vin 0 dc {vcm} ac 10m
+
+.end

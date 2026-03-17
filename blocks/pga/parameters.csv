@@ -1,0 +1,14 @@
+parameter,value,min,max,unit,description
+rf_val,100e3,50e3,500e3,ohm,Feedback resistor
+ibias_val,2e-6,0.5e-6,5e-6,A,Bias current
+w_diff,8e-6,2e-6,20e-6,m,Diff pair width
+l_diff,1e-6,0.5e-6,4e-6,m,Diff pair length
+w_load,2e-6,1e-6,10e-6,m,Active load width
+l_load,1e-6,0.5e-6,4e-6,m,Active load length
+w_out,8e-6,2e-6,20e-6,m,Output stage width
+l_out,0.5e-6,0.15e-6,2e-6,m,Output stage length
+w_tail,4e-6,2e-6,20e-6,m,Tail source width
+l_tail,2e-6,1e-6,4e-6,m,Tail source length
+cc_w,30e-6,10e-6,50e-6,m,Miller cap width
+cc_l,30e-6,10e-6,50e-6,m,Miller cap length
+rz,2e3,0,10e3,ohm,Nulling resistor

@@ -12,19 +12,27 @@ import json
 import sys
 import numpy as np
 
-PLOT_DIR = "plots"
+BLOCK_DIR = os.path.dirname(os.path.abspath(__file__)) or os.getcwd()
+SKY130_DIR = os.path.join(BLOCK_DIR, "sky130_models")
+PLOT_DIR = os.path.join(BLOCK_DIR, "plots")
 os.makedirs(PLOT_DIR, exist_ok=True)
 
-# Try to import matplotlib; fall back to non-interactive backend
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
+def abs_path(fname):
+    """Return absolute path relative to BLOCK_DIR."""
+    if os.path.isabs(fname):
+        return fname
+    return os.path.join(BLOCK_DIR, fname)
+
+
 def read_params_from_csv(fname="parameters.csv"):
     """Read current parameter values from CSV."""
     params = {}
-    with open(fname) as f:
+    with open(abs_path(fname)) as f:
         header = f.readline()
         for line in f:
             parts = line.strip().split(",")
@@ -35,12 +43,11 @@ def read_params_from_csv(fname="parameters.csv"):
 
 def write_netlist(template_file, output_file, params, extra_commands=""):
     """Read design.cir, substitute parameters, replace .control block."""
-    with open(template_file) as f:
+    with open(abs_path(template_file)) as f:
         netlist = f.read()
 
     # Override parameter values
     for pname, pval in params.items():
-        # Replace .param lines
         netlist = re.sub(
             rf'(\.param\s+{pname}\s*=\s*)[\S]+',
             rf'\g<1>{pval}',
@@ -55,60 +62,61 @@ def write_netlist(template_file, output_file, params, extra_commands=""):
         flags=re.DOTALL
     )
 
-    with open(output_file, 'w') as f:
+    out_path = abs_path(output_file)
+    with open(out_path, 'w') as f:
         f.write(netlist)
-    return output_file
+    return out_path
 
 
 def run_ngspice(netlist_file, timeout=120):
-    """Run ngspice and return stdout+stderr."""
+    """Run ngspice from sky130_models dir so .lib relative includes work."""
     result = subprocess.run(
         ["ngspice", "-b", netlist_file],
         capture_output=True, text=True, timeout=timeout,
-        cwd=os.path.dirname(os.path.abspath(__file__)) or "."
+        cwd=SKY130_DIR
     )
     return result.stdout + "\n" + result.stderr
 
 
 def parse_wrdata(filename):
-    """Parse ngspice wrdata output file. Returns (x_array, y_array)."""
-    x, y = [], []
-    if not os.path.exists(filename):
-        return np.array([]), np.array([])
-    with open(filename) as f:
+    """Parse ngspice wrdata output file. Returns list of columns as arrays."""
+    filepath = abs_path(filename)
+    if not os.path.exists(filepath):
+        return []
+    data = []
+    with open(filepath) as f:
         for line in f:
             line = line.strip()
             if not line or line.startswith('#') or line.startswith('*'):
                 continue
             parts = line.split()
-            if len(parts) >= 2:
-                try:
-                    x.append(float(parts[0]))
-                    y.append(float(parts[1]))
-                except ValueError:
-                    continue
-    return np.array(x), np.array(y)
+            try:
+                data.append([float(p) for p in parts])
+            except ValueError:
+                continue
+    if not data:
+        return []
+    arr = np.array(data)
+    return [arr[:, i] for i in range(arr.shape[1])]
 
 
 def tb1_dc_operating_point(params):
     """TB1: DC operating point at TT/27C/1.8V."""
     print("\n=== TB1: DC Operating Point ===")
 
-    ctrl = """.control
-set wr_vecnames
+    ctrl = f""".control
 op
 let vref_val = v(vref)
 let idd = -@VDD[i]
 let power_uw = idd * 1.8 * 1e6
 print vref_val idd power_uw
-print v(nb1) v(nb2) v(e1) v(e2) v(mid2)
+print v(nb1) v(nb2) v(e1) v(e2)
 quit
 .endc"""
 
     nf = write_netlist("design.cir", "tb1_dc.cir", params, ctrl)
     out = run_ngspice(nf)
 
-    # Parse results
     vref = None
     power = None
     idd = None
@@ -127,6 +135,11 @@ quit
             if m:
                 idd = float(m.group(1))
 
+    # Also print all node voltages for debugging
+    for line in out.split('\n'):
+        if 'v(' in line.lower() and '=' in line:
+            print(f"  {line.strip()}")
+
     print(f"  V_REF = {vref} V")
     print(f"  I_DD  = {idd} A")
     print(f"  Power = {power} uW")
@@ -138,34 +151,43 @@ def tb2_temperature_sweep(params):
     """TB2: Temperature sweep -40C to 125C."""
     print("\n=== TB2: Temperature Sweep ===")
 
-    ctrl = """.control
+    wrfile = abs_path("temp_sweep")
+    ctrl = f""".control
 dc temp -40 125 1
-wrdata temp_sweep v(vref)
+wrdata {wrfile} v(vref)
 quit
 .endc"""
 
     nf = write_netlist("design.cir", "tb2_temp.cir", params, ctrl)
     out = run_ngspice(nf)
 
-    temp, vref = parse_wrdata("temp_sweep")
+    cols = parse_wrdata("temp_sweep")
+    if len(cols) < 2:
+        print("  ERROR: Temperature sweep produced insufficient data")
+        print(f"  ngspice output: {out[-500:]}")
+        return {"tc_ppm_c": 9999, "vref_min_temp": None, "vref_max_temp": None}
+
+    temp, vref = cols[0], cols[1]
 
     if len(vref) < 10:
-        print("  ERROR: Temperature sweep produced insufficient data")
+        print("  ERROR: Temperature sweep produced insufficient data points")
         return {"tc_ppm_c": 9999, "vref_min_temp": None, "vref_max_temp": None}
 
     vref_nom = vref[np.argmin(np.abs(temp - 27))]
     vref_min = np.min(vref)
     vref_max = np.max(vref)
-    delta_t = 165.0  # -40 to 125
+    delta_t = 165.0
 
-    tc_ppm = (vref_max - vref_min) / (vref_nom * delta_t) * 1e6
+    if vref_nom > 0:
+        tc_ppm = (vref_max - vref_min) / (vref_nom * delta_t) * 1e6
+    else:
+        tc_ppm = 9999
 
     print(f"  V_REF(27C) = {vref_nom:.6f} V")
     print(f"  V_REF_min  = {vref_min:.6f} V (at T={temp[np.argmin(vref)]:.0f}C)")
     print(f"  V_REF_max  = {vref_max:.6f} V (at T={temp[np.argmax(vref)]:.0f}C)")
     print(f"  TC = {tc_ppm:.1f} ppm/C")
 
-    # Plot
     plt.figure(figsize=(8, 5))
     plt.plot(temp, vref * 1000, 'b-', linewidth=2)
     plt.xlabel('Temperature (°C)')
@@ -176,7 +198,7 @@ quit
     plt.axhline(y=1250, color='r', linestyle='--', alpha=0.5, label='Spec max (1.25V)')
     plt.legend()
     plt.tight_layout()
-    plt.savefig(f'{PLOT_DIR}/vref_vs_temperature.png', dpi=150)
+    plt.savefig(os.path.join(PLOT_DIR, 'vref_vs_temperature.png'), dpi=150)
     plt.close()
 
     return {
@@ -191,39 +213,41 @@ def tb3_supply_sweep(params):
     """TB3: Supply sweep 1.62V to 1.98V for line regulation and PSRR."""
     print("\n=== TB3: Supply Sweep (Line Regulation / PSRR) ===")
 
-    # Need to modify netlist to make VDD a parameter we can sweep
-    ctrl = """.control
+    wrfile = abs_path("supply_sweep")
+    ctrl = f""".control
 dc VDD 1.62 1.98 0.01
-wrdata supply_sweep v(vref)
+wrdata {wrfile} v(vref)
 quit
 .endc"""
 
     nf = write_netlist("design.cir", "tb3_supply.cir", params, ctrl)
     out = run_ngspice(nf)
 
-    vdd_arr, vref = parse_wrdata("supply_sweep")
-
-    if len(vref) < 5:
+    cols = parse_wrdata("supply_sweep")
+    if len(cols) < 2:
         print("  ERROR: Supply sweep produced insufficient data")
         return {"line_reg_mv_v": 9999, "psrr_dc_db": 0}
 
-    # Line regulation: delta_vref / delta_vdd in mV/V
+    vdd_arr, vref = cols[0], cols[1]
+
+    if len(vref) < 5:
+        print("  ERROR: Supply sweep produced insufficient data points")
+        return {"line_reg_mv_v": 9999, "psrr_dc_db": 0}
+
     delta_vdd = vdd_arr[-1] - vdd_arr[0]
     delta_vref = vref[-1] - vref[0]
     line_reg = abs(delta_vref / delta_vdd) * 1000  # mV/V
 
-    # PSRR = 20*log10(delta_VDD / delta_VREF)
     if abs(delta_vref) > 1e-15:
         psrr_db = 20 * np.log10(abs(delta_vdd / delta_vref))
     else:
-        psrr_db = 120  # Suspiciously good, cap it
+        psrr_db = 120
 
     print(f"  Delta_VDD  = {delta_vdd*1000:.1f} mV")
     print(f"  Delta_VREF = {delta_vref*1e6:.1f} uV")
     print(f"  Line Reg   = {line_reg:.2f} mV/V")
     print(f"  PSRR_DC    = {psrr_db:.1f} dB")
 
-    # Plot
     plt.figure(figsize=(8, 5))
     plt.plot(vdd_arr, vref * 1000, 'b-', linewidth=2)
     plt.xlabel('VDD (V)')
@@ -231,21 +255,19 @@ quit
     plt.title(f'V_REF vs Supply (Line Reg = {line_reg:.2f} mV/V, PSRR = {psrr_db:.1f} dB)')
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig(f'{PLOT_DIR}/vref_vs_supply.png', dpi=150)
+    plt.savefig(os.path.join(PLOT_DIR, 'vref_vs_supply.png'), dpi=150)
     plt.close()
 
     return {"line_reg_mv_v": line_reg, "psrr_dc_db": psrr_db}
 
 
 def tb4_startup_transient(params):
-    """TB4: Startup transient — ramp VDD 0->1.8V in 10us, monitor settling."""
+    """TB4: Startup transient — ramp VDD 0->1.8V in 10us."""
     print("\n=== TB4: Startup Transient ===")
 
-    # Need to replace DC VDD source with a PWL ramp
-    with open("design.cir") as f:
+    with open(abs_path("design.cir")) as f:
         netlist = f.read()
 
-    # Override parameters
     for pname, pval in params.items():
         netlist = re.sub(
             rf'(\.param\s+{pname}\s*=\s*)[\S]+',
@@ -253,80 +275,56 @@ def tb4_startup_transient(params):
             netlist
         )
 
-    # Replace VDD source with PWL ramp
     netlist = netlist.replace(
         "VDD vdd 0 DC 1.8",
         "VDD vdd 0 PWL(0 0 10u 1.8 200u 1.8)"
     )
 
-    # Replace .control block
-    ctrl = """.control
+    wrfile = abs_path("startup_tran")
+    ctrl = f""".control
 tran 0.1u 200u
-wrdata startup_tran v(vref) v(vdd)
+wrdata {wrfile} v(vref) v(vdd)
 quit
 .endc"""
 
     netlist = re.sub(r'\.control.*?\.endc', ctrl, netlist, flags=re.DOTALL)
 
-    with open("tb4_startup.cir", 'w') as f:
+    nf = abs_path("tb4_startup.cir")
+    with open(nf, 'w') as f:
         f.write(netlist)
 
-    out = run_ngspice("tb4_startup.cir")
+    out = run_ngspice(nf)
 
-    time_arr, vref = parse_wrdata("startup_tran")
-
-    if len(vref) < 10:
+    cols = parse_wrdata("startup_tran")
+    if len(cols) < 2:
         print("  ERROR: Startup transient produced insufficient data")
         return {"startup_time_us": 9999}
 
-    # The wrdata may have interleaved columns; parse both
-    # Actually wrdata with two signals writes: time v1 time v2 on alternating lines
-    # Let's re-parse more carefully
-    data = []
-    if os.path.exists("startup_tran"):
-        with open("startup_tran") as f:
-            for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 2:
-                    try:
-                        data.append([float(p) for p in parts])
-                    except ValueError:
-                        continue
-
-    if not data:
-        print("  ERROR: Could not parse startup data")
-        return {"startup_time_us": 9999}
-
-    data = np.array(data)
-    # wrdata with 2 vectors: columns are time, v(vref), v(vdd)
-    if data.shape[1] >= 3:
-        time_arr = data[:, 0]
-        vref = data[:, 1]
-        vdd_t = data[:, 2]
+    if len(cols) >= 3:
+        time_arr, vref, vdd_t = cols[0], cols[1], cols[2]
     else:
-        time_arr = data[:, 0]
-        vref = data[:, 1]
+        time_arr, vref = cols[0], cols[1]
         vdd_t = None
 
-    # Find final vref value (last 10% of simulation)
+    if len(vref) < 10:
+        print("  ERROR: Insufficient data points")
+        return {"startup_time_us": 9999}
+
     final_vref = np.mean(vref[-len(vref)//10:])
 
-    # Find when vref first reaches within 1% of final value and stays
-    threshold = 0.01 * abs(final_vref)
+    threshold = 0.01 * abs(final_vref) if abs(final_vref) > 0.01 else 0.001
     settled = np.abs(vref - final_vref) < threshold
 
     startup_time_us = 9999
     if np.any(settled):
-        # Find first time it stays settled (check it doesn't leave)
         for i in range(len(settled)):
             if settled[i] and np.all(settled[i:min(i+50, len(settled))]):
-                startup_time_us = time_arr[i] * 1e6  # Convert to us
+                startup_time_us = time_arr[i] * 1e6
                 break
 
     print(f"  Final V_REF = {final_vref:.4f} V")
     print(f"  Startup time = {startup_time_us:.1f} us")
 
-    # Plot
     fig, ax1 = plt.subplots(figsize=(8, 5))
     ax1.plot(time_arr * 1e6, vref, 'b-', linewidth=2, label='V_REF')
     if vdd_t is not None:
@@ -334,15 +332,16 @@ quit
         ax2.plot(time_arr * 1e6, vdd_t, 'r--', linewidth=1, alpha=0.5, label='VDD')
         ax2.set_ylabel('VDD (V)', color='r')
         ax2.legend(loc='upper right')
-    ax1.set_xlabel('Time (µs)')
+    ax1.set_xlabel('Time (us)')
     ax1.set_ylabel('V_REF (V)', color='b')
-    ax1.set_title(f'Startup Transient (settling = {startup_time_us:.1f} µs)')
+    ax1.set_title(f'Startup Transient (settling = {startup_time_us:.1f} us)')
     ax1.grid(True, alpha=0.3)
-    ax1.axhline(y=final_vref * 0.99, color='g', linestyle=':', alpha=0.5, label='99% settled')
-    ax1.axhline(y=final_vref * 1.01, color='g', linestyle=':', alpha=0.5)
+    if final_vref > 0.01:
+        ax1.axhline(y=final_vref * 0.99, color='g', linestyle=':', alpha=0.5)
+        ax1.axhline(y=final_vref * 1.01, color='g', linestyle=':', alpha=0.5)
     ax1.legend(loc='lower right')
     plt.tight_layout()
-    plt.savefig(f'{PLOT_DIR}/startup_transient.png', dpi=150)
+    plt.savefig(os.path.join(PLOT_DIR, 'startup_transient.png'), dpi=150)
     plt.close()
 
     return {"startup_time_us": startup_time_us}
@@ -350,7 +349,7 @@ quit
 
 def compute_score(measurements):
     """Compute weighted score based on specs.json."""
-    with open("specs.json") as f:
+    with open(abs_path("specs.json")) as f:
         specs = json.load(f)
 
     total_weight = 0
@@ -395,11 +394,11 @@ def main():
     print("BANDGAP VOLTAGE REFERENCE EVALUATION")
     print("=" * 60)
 
-    # Read parameters
+    os.chdir(BLOCK_DIR)
+
     params = read_params_from_csv()
     print(f"\nParameters: {params}")
 
-    # Run all testbenches
     measurements = {}
 
     tb1 = tb1_dc_operating_point(params)
@@ -414,7 +413,6 @@ def main():
     tb4 = tb4_startup_transient(params)
     measurements.update(tb4)
 
-    # Compute score
     print("\n" + "=" * 60)
     print("SCORING")
     print("=" * 60)
@@ -426,19 +424,13 @@ def main():
     print(f"\nscore = {score:.4f}")
     print(f"specs_met = {specs_met}/{total_specs}")
 
-    # Save measurements
     measurements["score"] = score
     measurements["specs_met"] = f"{specs_met}/{total_specs}"
-    with open("measurements.json", 'w') as f:
+    with open(abs_path("measurements.json"), 'w') as f:
         json.dump(measurements, f, indent=2, default=str)
 
     print(f"\nResults saved to measurements.json")
     print(f"Plots saved to {PLOT_DIR}/")
-
-    # Clean up temp files
-    for f in ["tb1_dc.cir", "tb2_temp.cir", "tb3_supply.cir", "tb4_startup.cir",
-              "temp_sweep", "supply_sweep", "startup_tran"]:
-        pass  # Keep for debugging
 
     return score
 

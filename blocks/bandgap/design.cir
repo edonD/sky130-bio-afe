@@ -2,14 +2,12 @@
 *
 * Voltage-mode (Banba-like) with PMOS pass transistor.
 * V_REF = Vt*ln(N)*Ra/Rptat + Vbe1
-*
-* Starting from exact V1 working parameters that achieved score=1.0
 
 * === Parameters ===
-.param p_wp_pass = 8e-6
+.param p_wp_pass = 20e-6
 .param p_lp_pass = 1e-6
-.param p_ra_l = 120e-6
-.param p_rptat_l = 12e-6
+.param p_ra_l = 122e-6
+.param p_rptat_l = 12.5e-6
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
 .param p_wn_ota = 2e-6
@@ -40,7 +38,6 @@ XQ2 vss vss eb vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
 Cvref vref vss {p_cap}
 
 * === OTA (NFET diff pair, PMOS active load) ===
-* Tail bias from VDD through high-R resistor
 XMN_bias ota_bias ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
 XMN_tail ota_tail ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
 XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=400e-6 mult=1
@@ -55,7 +52,7 @@ XMP_lp ota_outp ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ot
 
 * Compensation
 Rcomp ota_outp opamp_out 10k
-Ccomp opamp_out vss 1p
+Ccomp opamp_out vss 2p
 
 * === Simulation Control ===
 .lib "sky130_models/sky130.lib.spice" tt

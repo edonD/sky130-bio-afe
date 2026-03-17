@@ -150,17 +150,20 @@ codes of dynamic range. ENOB > 10 means quantization noise won't limit the syste
 
 ## Sensitivity Analysis
 
-### Unit Cap Size (100 runs each)
+### Unit Cap Size (500 runs each)
 
-| Size | σ/C | Worst DNL | Yield (DNL<1.0) |
-|------|-----|-----------|-----------------|
-| 5x5 µm (PDK min) | 0.56% | 1.125 LSB | 99% |
-| 7x7 µm | 0.40% | 0.500 LSB | 100% |
-| 10x10 µm (chosen) | 0.28% | 0.500 LSB | 100% |
-| 15x15 µm | 0.19% | 0.250 LSB | 100% |
+| Size | σ/C | DNL p99 | Worst DNL | Yield | Area |
+|------|-----|---------|-----------|-------|------|
+| 5.0x5.0 µm (PDK min) | 0.56% | 0.875 | 1.125 LSB | 99.8% | 0.10 mm² |
+| 5.5x5.5 µm | 0.51% | 0.875 | 0.875 LSB | 100% | 0.12 mm² |
+| 6.5x6.5 µm | 0.43% | 0.875 | 0.875 LSB | 100% | 0.17 mm² |
+| 7.0x7.0 µm | 0.40% | 0.625 | 0.875 LSB | 100% | 0.20 mm² |
+| 8.0x8.0 µm | 0.35% | 0.625 | 0.625 LSB | 100% | 0.26 mm² |
+| 10x10 µm (chosen) | 0.28% | 0.376 | 0.625 LSB | 100% | 0.41 mm² |
 
-Minimum viable without calibration: 7x7 µm. Our 10x10 µm has margin.
-At 5x5 µm (PDK minimum), yield drops to 99% — would need 1-bit calibration.
+Minimum viable without calibration: **5.5x5.5 µm** (100% yield, 0.12 mm²).
+Conservative choice: 10x10 µm for maximum margin. Could save 70% area
+by switching to 5.5 µm caps with no yield loss.
 
 ### Supply Variation (±10%)
 
@@ -209,3 +212,4 @@ Robust across full ±10% supply range.
 | 4 | 1.00 | 6/6 | VCM offset model: charge redistribution keeps VCM stable |
 | 5 | 1.00 | 6/6 | Combined stress (mismatch+noise+VCM): ENOB 10.53-10.62 |
 | 6 | 1.00 | 6/6 | Extended MC 500 runs: 100% yield, p99 DNL=0.376, p1 ENOB=10.18 |
+| 7 | 1.00 | 6/6 | Area optimization: 5.5um min viable (100% yield), 70% area savings |

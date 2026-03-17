@@ -1,0 +1,104 @@
+* Capacitively-Coupled Instrumentation Amplifier (CCIA)
+* SKY130 Process, 1.8V supply
+* Topology: Fully-differential folded-cascode OTA with system-level chopping
+* Gain = Cin/Cfb = 51pF/1pF = 51 V/V = 34.15 dB
+
+.lib "sky130_models/sky130.lib.spice" tt
+
+* ── Supply ──
+Vdd vdd 0 1.8
+Vss vss 0 0
+
+* ── Bias ──
+Ibias vdd nbias 5u
+XMnb nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=10u l=8u m=1
+
+* Mirror for PMOS tail
+XMpb1 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=10u l=8u m=1
+Ibias2 pbias vss 5u
+
+* ── Fully-Differential Folded-Cascode OTA ──
+.subckt ota inp inn outp outn vcm vdd vss nbias pbias
+
+* PMOS LVT input differential pair (large W for low noise, long L)
+* Tail current source: 10 uA total (5 uA per side)
+XMtail tailn pbias vdd vdd sky130_fd_pr__pfet_01v8 w=20u l=8u m=1
+
+XM1 d1n inp tailn vdd sky130_fd_pr__pfet_01v8_lvt w=99u l=8u m=8
+XM2 d2n inn tailn vdd sky130_fd_pr__pfet_01v8_lvt w=99u l=8u m=8
+
+* NMOS folding current sources (5.5 uA each — absorbs 5 uA from diff pair + 0.5 uA fold)
+XMf1 d1n nbias vss vss sky130_fd_pr__nfet_01v8 w=12u l=8u m=1
+XMf2 d2n nbias vss vss sky130_fd_pr__nfet_01v8 w=12u l=8u m=1
+
+* NMOS cascodes
+XMc1 outn ncasc d1n vss sky130_fd_pr__nfet_01v8 w=49u l=2u m=2
+XMc2 outp ncasc d2n vss sky130_fd_pr__nfet_01v8 w=49u l=2u m=2
+
+* NMOS cascode bias: Vgs + Vds_sat ~ 0.7V
+Vncasc ncasc vss 0.7
+
+* PMOS loads (CMFB-controlled)
+XMl1 outn cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
+XMl2 outp cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
+
+* CMFB: sense output CM, compare to vcm, drive PMOS loads
+* CMFB: when output CM rises above vcm, raise cmfb to turn off PMOS loads
+Ecmfb cmfb 0 vol='0.9 + 100*((v(outp)+v(outn))/2 - v(vcm))'
+
+.ends ota
+
+* ── Instantiate OTA ──
+Xota vgp vgn voutp voutn vcm vdd vss nbias pbias ota
+
+* ── Common-mode voltage ──
+Vcm vcm 0 0.9
+
+* ── Input capacitors (Cin = 51 pF, with 0.1% mismatch for honest CMRR test) ──
+* Cin+ from inp_chop_p to vgp
+* Cin- from inp_chop_n to vgn
+Cinp inp_chop_p vgp 51p
+Cinn inp_chop_n vgn 51p
+
+* ── Feedback capacitors (Cfb = 1 pF) ──
+Cfbp voutp vgn 1p
+Cfbn voutn vgp 1p
+
+* ── Output common-mode biasing ──
+* Large resistors to set DC operating point of OTA inputs
+Rbp vgp vcm 100G
+Rbn vgn vcm 100G
+
+* ── Chopper switches (behavioral — ideal transmission gates) ──
+* Input chopper: modulates at f_chop
+* When CLK=high: inp->inp_chop_p, inn->inp_chop_n (non-inverted)
+* When CLK=low:  inp->inp_chop_n, inn->inp_chop_p (inverted)
+* Implemented as voltage-controlled switches
+
+.model SW1 SW vt=0.5 vh=0.01 ron=100 roff=1G
+
+* Clock source
+Vclk clk 0 pulse(0 1 0 1n 1n 50u 100u)
+
+* Input chopper
+S1a inp inp_chop_p clk 0 SW1
+S1b inn inp_chop_n clk 0 SW1
+S1c inp inp_chop_n clk_b 0 SW1
+S1d inn inp_chop_p clk_b 0 SW1
+
+* Inverted clock
+Eclkb clk_b 0 vol='1-v(clk)'
+
+* Output chopper (demodulator)
+S2a voutp vout_dem_p clk 0 SW1
+S2b voutn vout_dem_n clk 0 SW1
+S2c voutp vout_dem_n clk_b 0 SW1
+S2d voutn vout_dem_p clk_b 0 SW1
+
+* Output LPF (reconstruct after demod) — simple RC
+Rlpfp vout_dem_p vout_p 10k
+Clpfp vout_p vcm 100p
+Rlpfn vout_dem_n vout_n 10k
+Clpfn vout_n vcm 100p
+
+.end

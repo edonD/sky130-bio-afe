@@ -705,8 +705,12 @@ quit
     # Find R-peaks in output (may be inverted due to -C_in/C_fb gain)
     from scipy.signal import find_peaks
     # Check if signal is inverted (look at both positive and negative peaks)
-    peaks_pos, _ = find_peaks(vout_ac, height=0.05e-3, distance=int(0.3/0.0005))
-    peaks_neg, _ = find_peaks(-vout_ac, height=0.05e-3, distance=int(0.3/0.0005))
+    # Use height threshold to find R-peaks (exclude smaller T/P waves)
+    # Compute average sample rate from actual data (ngspice uses adaptive timestep)
+    avg_dt = (time_out[-1] - time_out[0]) / (len(time_out) - 1) if len(time_out) > 1 else 0.0005
+    beat_distance = max(int(0.5 / avg_dt), 10)  # ≥0.5s between peaks
+    peaks_pos, props_pos = find_peaks(vout_ac, height=0.3e-3, distance=beat_distance)
+    peaks_neg, props_neg = find_peaks(-vout_ac, height=0.3e-3, distance=beat_distance)
     # Use whichever has larger peaks (inverted or non-inverted)
     if len(peaks_neg) > 0 and (len(peaks_pos) == 0 or
         np.max(np.abs(vout_ac[peaks_neg])) > np.max(np.abs(vout_ac[peaks_pos]))):
@@ -716,8 +720,16 @@ quit
     else:
         peaks_out = peaks_pos
 
-    # Expected R-peak amplitude (input = 1 mV, filter gain ≈ 1)
-    expected_rpeak = 1e-3
+    # Keep only R-peaks (filter out P/T waves by requiring >50% of max peak)
+    if len(peaks_out) > 1:
+        peak_max = np.max(vout_ac[peaks_out])
+        rpeak_mask = vout_ac[peaks_out] > 0.5 * peak_max
+        peaks_out = peaks_out[rpeak_mask]
+
+    # Expected R-peak amplitude: 1 mV raw, minus DC component removed by HPF
+    # The HPF AC-couples the signal, removing the mean ECG level
+    ecg_mean = np.mean(ecg)  # average ECG level (all positive Gaussians)
+    expected_rpeak = 1e-3 - ecg_mean  # R-peak above AC-coupled baseline
 
     if len(peaks_out) > 0:
         rpeak_amplitudes = vout_ac[peaks_out]

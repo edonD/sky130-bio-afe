@@ -13,3 +13,8 @@ step	commit	score	specs_met	description
 11	-revert	0.70	4/6	source degeneration — PSRR slightly worse (Rs adds VDD coupling)
 12	-revert	0.25	2/6	CG second gain stage — convergence/startup issues, chicken-and-egg
 13	-revert	0.25	2/6	d1-gated output PMOS — TC=5408ppm, PSRR=-11dB (massive failure)
+14	5216750	0.45	3/6	voltage-mode Kuijk topology (wrong polarity!) — PSRR appeared good but metastable
+15	7ce0541	0.75	5/6	FIX op-amp polarity — PSRR=62dB, TC=90ppm (TC needs tuning)
+16	45613b0	0.80	5/6	Ra=120u for TC=31ppm — PSRR=59dB (close but not passing)
+17	9e63420	1.00	6/6	Rbias=400u + OTA load L=4u — ALL SPECS PASS! PSRR=73dB, TC=38ppm
+18	3a099e5	1.00	6/6	Phase B TB5: 45/45 PVT corners pass (Vref 1.232-1.245V)

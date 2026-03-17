@@ -60,7 +60,11 @@ def run_ngspice(netlist_str, timeout=120):
 
 
 def parse_wrdata(filename):
-    """Parse ngspice wrdata output file. Returns dict of column arrays."""
+    """Parse ngspice wrdata output file.
+    ngspice wrdata format: each signal gets its own time column,
+    so for N signals there are 2*N columns: t1 v1 t2 v2 t3 v3 ...
+    Returns array with columns: [time, val1, val2, val3, ...]
+    where time is taken from the first signal's time column."""
     filepath = os.path.join(SKY130_DIR, filename)
     if not os.path.exists(filepath):
         return None
@@ -79,9 +83,16 @@ def parse_wrdata(filename):
     if not data:
         return None
     arr = np.array(data)
+    # Reshape: extract time from first pair, values from all pairs
+    n_cols = arr.shape[1]
+    n_signals = n_cols // 2
+    result = np.zeros((arr.shape[0], n_signals + 1))
+    result[:, 0] = arr[:, 0]  # time from first signal
+    for i in range(n_signals):
+        result[:, i + 1] = arr[:, 2 * i + 1]  # value columns
     # Clean up
     os.unlink(filepath)
-    return arr
+    return result
 
 
 # =============================================================================
@@ -91,11 +102,10 @@ def characterize_comparator():
     """Simulate comparator with swept input to find offset and delay."""
     print("=== TB0: Comparator Characterization ===")
 
-    # Sweep vinp around VCM=0.9V, measure comparator decision
-    # Use multiple clock cycles for each input voltage
+    # Sweep vinp around VCM=0.9V using a single simulation with wrdata
+    # Use a 1mV step to find offset precisely
     sweep_points = np.linspace(0.895, 0.905, 41)  # ±5mV around VCM
     decisions = []
-    delays = []
 
     for vp in sweep_points:
         netlist = f"""* Comparator offset measurement
@@ -108,10 +118,10 @@ VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
 Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     outn   vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     outp   vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -123,41 +133,24 @@ CL2 outn 0 10f
 .tran 0.1n 200n
 .control
 run
-* Measure output at end of first evaluation phase (t=60ns, CLK was high from 10.5n to 59.5n)
-meas tran voutp FIND v(outp) AT=58n
-meas tran voutn FIND v(outn) AT=58n
-* Measure delay: time from CLK rising to output crossing VDD/2
-meas tran tdelay TRIG v(clk) VAL=0.9 RISE=1 TARG v(outp) VAL=0.9 CROSS=1
+wrdata comp_sweep.txt v(outp) v(outn)
 quit
 .endc
 .end
 """
         output = run_ngspice(netlist)
-
-        # Parse measurement results
-        voutp = None
-        voutn = None
-        tdelay = None
-        for line in output.split('\n'):
-            if 'voutp' in line.lower() and '=' in line:
-                m = re.search(r'=\s*([-+eE\d.]+)', line)
-                if m:
-                    voutp = float(m.group(1))
-            if 'voutn' in line.lower() and '=' in line:
-                m = re.search(r'=\s*([-+eE\d.]+)', line)
-                if m:
-                    voutn = float(m.group(1))
-            if 'tdelay' in line.lower() and '=' in line:
-                m = re.search(r'=\s*([-+eE\d.]+)', line)
-                if m:
-                    tdelay = float(m.group(1))
-
-        if voutp is not None and voutn is not None:
+        data = parse_wrdata('comp_sweep.txt')
+        if data is not None and len(data) > 0:
+            # Check output at end of evaluation phase (~58ns)
+            # CLK high from 10.5n to 59.5n
+            t = data[:, 0]
+            idx = np.argmin(np.abs(t - 58e-9))
+            voutp = data[idx, 1]
+            voutn = data[idx, 2]
             decision = 1 if voutp > voutn else 0
             decisions.append(decision)
         else:
-            decisions.append(-1)  # failed
-        delays.append(tdelay)
+            decisions.append(-1)
 
     # Find offset: where decision flips
     decisions = np.array(decisions)
@@ -168,27 +161,94 @@ quit
             offset_v = (sweep_points[i] + sweep_points[i-1]) / 2.0 - 0.9
             break
 
-    # Average delay
-    valid_delays = [d for d in delays if d is not None and d > 0]
-    avg_delay = np.mean(valid_delays) if valid_delays else 5e-9
+    # Measure delay from a separate simulation with clear differential input
+    delay_s = measure_comp_delay()
 
     print(f"  Comparator offset: {offset_v*1e3:.3f} mV")
-    print(f"  Comparator delay:  {avg_delay*1e9:.2f} ns")
+    print(f"  Comparator delay:  {delay_s*1e9:.2f} ns")
     print(f"  Decisions (sweep): {decisions.tolist()}")
 
     return {
         'offset_v': offset_v,
-        'delay_s': avg_delay,
+        'delay_s': delay_s,
         'sweep_v': sweep_points.tolist(),
         'decisions': decisions.tolist()
     }
+
+
+def measure_comp_delay():
+    """Measure comparator regeneration delay using wrdata."""
+    netlist = f"""* Comparator delay measurement
+.lib "sky130.lib.spice" tt
+
+VDD vdd 0 {VDD}
+VSS vss 0 0
+VINP vinp 0 0.905
+VINN vinn 0 0.9
+VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
+
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X8     outn   outp   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+
+CL1 outp 0 10f
+CL2 outn 0 10f
+
+.tran 0.05n 200n
+.control
+run
+wrdata comp_delay.txt v(outp) v(outn) v(clk)
+quit
+.endc
+.end
+"""
+    output = run_ngspice(netlist)
+    data = parse_wrdata('comp_delay.txt')
+    if data is None:
+        return 5e-9  # default
+
+    t = data[:, 0]
+    outp = data[:, 1]
+    outn = data[:, 2]
+    clk = data[:, 3]
+
+    # Find CLK rising edge (first crossing of 0.9V going up)
+    clk_rise = None
+    for i in range(1, len(clk)):
+        if clk[i-1] < 0.9 and clk[i] >= 0.9:
+            clk_rise = t[i]
+            break
+
+    if clk_rise is None:
+        return 5e-9
+
+    # Find whichever output falls below 0.9V first after CLK rise
+    # (depends on comparator polarity and input differential)
+    start_idx = np.argmin(np.abs(t - clk_rise))
+    fall_time = None
+    for i in range(start_idx + 1, len(t)):
+        if outp[i] < 0.5 or outn[i] < 0.5:
+            fall_time = t[i]
+            break
+
+    if fall_time is not None:
+        delay = fall_time - clk_rise
+        return max(delay, 0.1e-9)
+
+    return 5e-9  # default if measurement fails
 
 
 # =============================================================================
 # TB3: Comparator timing (single conversion waveform)
 # =============================================================================
 def measure_timing():
-    """Simulate one comparison and measure timing."""
+    """Simulate one comparison and measure timing using wrdata."""
     print("\n=== TB3: Conversion Timing ===")
 
     # Simulate comparator with 1mV differential
@@ -202,10 +262,10 @@ VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
 Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     outn   vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     outp   vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -218,25 +278,38 @@ CL2 outn 0 10f
 .control
 run
 wrdata timing_out.txt v(outp) v(outn) v(clk)
-meas tran tdelay TRIG v(clk) VAL=0.9 RISE=1 TARG v(outp) VAL=0.9 FALL=1
-meas tran teval_start WHEN v(clk)=0.9 RISE=1
-meas tran teval_end WHEN v(outp)=0.9 FALL=1
 quit
 .endc
 .end
 """
     output = run_ngspice(netlist)
+    data = parse_wrdata('timing_out.txt')
 
-    # Parse delay
     comp_delay_ns = 5.0  # default
-    for line in output.split('\n'):
-        if 'tdelay' in line.lower() and '=' in line:
-            m = re.search(r'=\s*([-+eE\d.]+)', line)
-            if m:
-                comp_delay_ns = float(m.group(1)) * 1e9
+    if data is not None:
+        t = data[:, 0]
+        outp = data[:, 1]
+        outn = data[:, 2]
+        clk = data[:, 3]
+
+        # Find CLK rising edge
+        clk_rise = None
+        for i in range(1, len(clk)):
+            if clk[i-1] < 0.9 and clk[i] >= 0.9:
+                clk_rise = t[i]
+                break
+
+        # Find whichever output falls below 0.5V first after CLK rise
+        if clk_rise is not None:
+            start_idx = np.argmin(np.abs(t - clk_rise))
+            for i in range(start_idx + 1, len(t)):
+                if outp[i] < 0.5 or outn[i] < 0.5:
+                    comp_delay_ns = (t[i] - clk_rise) * 1e9
+                    break
 
     # For async SAR: 12 comparisons × comp_delay ≈ total conversion time
-    conversion_time_ns = 12 * comp_delay_ns + 12 * 2  # + settling time
+    # Add settling time per bit (DAC settling ~2ns)
+    conversion_time_ns = 12 * comp_delay_ns + 12 * 2
     conversion_time_us = conversion_time_ns / 1000.0
 
     print(f"  Comparator delay: {comp_delay_ns:.2f} ns")
@@ -244,20 +317,19 @@ quit
     print(f"  Spec: < 500 us → {'PASS' if conversion_time_us < 500 else 'FAIL'}")
 
     # Plot timing waveform
-    data = parse_wrdata('timing_out.txt')
     if data is not None and HAS_PLOT:
-        t = data[:, 0] * 1e9  # ns
+        t_ns = data[:, 0] * 1e9
         fig, axes = plt.subplots(3, 1, figsize=(10, 8), sharex=True)
-        axes[0].plot(t, data[:, 1], 'b-', linewidth=0.8)
+        axes[0].plot(t_ns, data[:, 1], 'b-', linewidth=0.8)
         axes[0].set_ylabel('outp (V)')
         axes[0].set_title(f'Comparator Timing — delay = {comp_delay_ns:.2f} ns')
         axes[0].grid(True, alpha=0.3)
 
-        axes[1].plot(t, data[:, 2], 'r-', linewidth=0.8)
+        axes[1].plot(t_ns, data[:, 2], 'r-', linewidth=0.8)
         axes[1].set_ylabel('outn (V)')
         axes[1].grid(True, alpha=0.3)
 
-        axes[2].plot(t, data[:, 3], 'g-', linewidth=0.8)
+        axes[2].plot(t_ns, data[:, 3], 'g-', linewidth=0.8)
         axes[2].set_ylabel('CLK (V)')
         axes[2].set_xlabel('Time (ns)')
         axes[2].grid(True, alpha=0.3)
@@ -277,7 +349,7 @@ def measure_power():
     """Measure supply current during conversions."""
     print("\n=== TB4: Power Measurement ===")
 
-    # Simulate 10 clock cycles and measure average VDD current
+    # Simulate 10 clock cycles and measure average VDD current via wrdata
     netlist = f"""* Power measurement
 .lib "sky130.lib.spice" tt
 
@@ -288,10 +360,10 @@ VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
 Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     outn   vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     outp   vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   vss  vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -303,22 +375,22 @@ CL2 outn 0 10f
 .tran 0.5n 1000n
 .control
 run
-* Average current over 10 clock cycles
-meas tran iavg AVG i(VDD) FROM=10n TO=1000n
-meas tran irms RMS i(VDD) FROM=10n TO=1000n
+wrdata power_out.txt i(VDD)
 quit
 .endc
 .end
 """
     output = run_ngspice(netlist)
+    data = parse_wrdata('power_out.txt')
 
-    # Parse current
-    iavg = 0
-    for line in output.split('\n'):
-        if 'iavg' in line.lower() and '=' in line:
-            m = re.search(r'=\s*([-+eE\d.]+)', line)
-            if m:
-                iavg = abs(float(m.group(1)))
+    iavg = 50e-6  # default fallback
+    if data is not None:
+        t = data[:, 0]
+        current = np.abs(data[:, 1])
+        # Average over simulation excluding initial settling
+        mask = t > 10e-9
+        if np.any(mask):
+            iavg = np.mean(current[mask])
 
     # Power at comparator clock rate (10 MHz in this sim)
     power_at_clk = iavg * VDD

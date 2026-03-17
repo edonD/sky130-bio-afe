@@ -18,12 +18,14 @@
 Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=wtail l=lmin
 
 * Input differential pair (NMOS)
-X1     outn   vinp   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
-X2     outp   vinn   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
+* fn, fp are internal nodes connecting input pair to cross-coupled NMOS
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
 
-* NMOS cross-coupled latch
-X3     outp   outn   vss  vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
-X4     outn   outp   vss  vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
+* NMOS cross-coupled latch (sources connect to input pair drains)
+* This ensures the NMOS latch is inactive during reset (CLK=0)
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
 
 * PMOS reset switches (active when CLK=0)
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=wp l=lmin

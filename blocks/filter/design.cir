@@ -40,8 +40,8 @@ XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=12u l=1u
 XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 * Stage 2: PMOS CS driver
 XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
-* Stage 2 current source (~600 nA)
-XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=4u
+* Stage 2 current source (~500 nA)
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=3u l=4u
 * Miller compensation (parameterized)
 Cc s1out out {cc_val}
 .ends miller_opamp

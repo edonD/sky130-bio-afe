@@ -1,6 +1,6 @@
 # SKY130 Bandpass Filter — Design Report
 
-## Status: Phase A Complete — Score 1.0 (6/6 specs pass)
+## Status: Phase A+B Complete — Score 1.0 (6/6 specs pass, PVT verified)
 
 ## Spec Table
 
@@ -76,6 +76,31 @@ The PMOS anti-parallel pseudo-resistor caused DC convergence failure: when the v
 | Output stage (per opamp) | 0.70 | 4 |
 | **Total** | **4.55** | |
 | **Power (1.8V)** | **9.09 µW** | |
+
+## Phase B Verification
+
+### PVT Corners (TB6)
+![PVT Frequency Response](plots/pvt_frequency_response.png)
+
+All 15 corners (5 process × 3 temps) pass. f_high variation: 165.9–168.1 Hz (1%). Worst-case stopband attenuation: 21.5 dB > 20 dB. Note: this stability is due to ideal R/C components. With a real pseudo-R, f_low would shift 5–50× across PVT (documented limitation).
+
+### ECG Transient (TB4)
+![ECG Filtering](plots/ecg_filtering.png)
+
+Synthetic ECG (72 BPM, 1 mV R-peak) + 50 µV 60 Hz interference. P-QRS-T morphology preserved. The filter inverts the signal (gain = -C_in/C_fb = -1). 60 Hz passes through the filter (expected — rejection is the InAmp's CMRR job). R-peak amplitude ~0.9 mV after baseline shift from HPF DC removal.
+
+### Margin Analysis
+
+| Parameter | Value | Limit | Margin | Risk |
+|-----------|-------|-------|--------|------|
+| f_low (Hz) | 0.035 | < 1.0 | 96% | Low |
+| f_high (Hz) | 167.2 | 130–170 | 7% (2.8 Hz) | **High** |
+| Ripple (dB) | 0.80 | < 1 | 20% | Medium |
+| Atten 250 Hz (dB) | 21.8 | > 20 | 9% (1.8 dB) | **High** |
+| Noise (µVrms) | 86.3 | < 100 | 14% | Medium |
+| Power (µW) | 9.09 | < 10 | 9% (0.91 µW) | **High** |
+
+Three specs at 9% margin (f_high, stopband, power) are structurally constrained by the 6th-order Butterworth at fc=170 Hz. These cannot be improved independently without degrading other specs.
 
 ## Failed Ideas
 

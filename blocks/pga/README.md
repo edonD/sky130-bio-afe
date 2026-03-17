@@ -7,7 +7,7 @@
 Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input differential pair). Gain is set by the ratio Rf/Rin with Rf fixed at 10 MΩ and Rin switched for each gain setting.
 
 **Opamp topology:**
-- NMOS input diff pair (W=8u L=4u, ~0.95µA/side) — chosen for 0.9V CM compatibility
+- NMOS input diff pair (W=10u L=4u, ~0.95µA/side) — chosen for 0.9V CM compatibility, wide W for low 1/f noise
 - PMOS active load current mirror (W=4u L=8u) — long L for high DC gain
 - PMOS common-source second stage (W=12u L=8u)
 - NMOS current source load (W=2u L=8u m=2, ~0.95µA)
@@ -26,11 +26,11 @@ Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input dif
 |-----------|----------|--------|--------|--------|
 | Gain settings | 8 (all pass) | >= 7 | +1 | PASS |
 | Gain error | 0.74% (worst, G=128) | < 1% | 26% | PASS |
-| Bandwidth (G=128) | 16.2 kHz | > 10 kHz | 62% | PASS |
-| Output noise (G=1) | 25.7 µVrms | < 50 µVrms | 49% | PASS |
+| Bandwidth (G=128) | 16.6 kHz | > 10 kHz | 66% | PASS |
+| Output noise (G=1) | 23.6 µVrms | < 50 µVrms | 53% | PASS |
 | THD (10 Hz, 1 Vpp) | 0.021% | < 0.1% | 79% | PASS |
 | Power | 7.0 µW | < 10 µW | 30% | PASS |
-| Settling time | 69.5 µs | < 100 µs | 31% | PASS |
+| Settling time | 67.2 µs | < 100 µs | 33% | PASS |
 
 **All specs pass with >25% margin.**
 
@@ -72,8 +72,8 @@ Every design parameter was varied by ±20% individually, and all specs were veri
 
 | Parameter | -20% | +20% | Most Sensitive Spec |
 |-----------|------|------|---------------------|
-| Ibias (0.95µA) | PASS (BW=13.2k, P=5.7µW) | PASS (BW=18.6k, P=8.4µW) | BW, Power |
-| Diff pair W (8µ) | PASS | PASS | Minimal impact |
+| Ibias (0.95µA) | PASS (BW=13.8k, P=5.7µW) | PASS (BW=19.5k, P=8.4µW) | BW, Power |
+| Diff pair W (10µ) | PASS | PASS | Minimal impact |
 | Diff pair L (4µ) | PASS (err=0.86%) | PASS (err=0.68%) | Gain error |
 | PMOS load W (4µ) | PASS | PASS | Minimal impact |
 | PMOS load L (8µ) | PASS | PASS | Minimal impact |
@@ -83,7 +83,7 @@ Every design parameter was varied by ±20% individually, and all specs were veri
 | Rz (1.5kΩ) | PASS | PASS | Minimal impact |
 | Rf (10MΩ) | PASS (err=0.85%) | PASS (err=0.67%) | Gain error |
 
-**All 22 variations PASS.** The most sensitive parameter is Cc (controls GBW/BW tradeoff), but even at +20% the BW margin is still 12% above target. The design operates correctly across a wide range of component values.
+**All 22 variations PASS.** The most sensitive parameter is Cc (controls GBW/BW tradeoff), but even at +20% the BW margin is still 15% above target. The design operates correctly across a wide range of component values.
 
 ## PVT Corner Results (TB6)
 
@@ -93,14 +93,14 @@ Tested gain=128 across 5 corners × 3 temperatures (15 conditions). Relaxed targ
 
 | Corner | -40°C Error | 27°C Error | 125°C Error | -40°C BW | 27°C BW | 125°C BW |
 |--------|-----------|----------|-----------|---------|--------|---------|
-| tt | 0.72% | 0.74% | 0.81% | 19.1 kHz | 16.6 kHz | 13.2 kHz |
-| ss | 0.75% | 0.77% | 0.83% | 19.1 kHz | 15.8 kHz | 12.6 kHz |
-| ff | 0.70% | 0.73% | 0.80% | 19.1 kHz | 16.6 kHz | 13.2 kHz |
-| sf | 0.87% | 0.87% | 0.91% | 19.1 kHz | 16.6 kHz | 13.2 kHz |
-| fs | 0.64% | 0.67% | 0.76% | 18.2 kHz | 15.8 kHz | 12.6 kHz |
+| tt | 0.71% | 0.74% | 0.80% | 20.0 kHz | 16.6 kHz | 13.8 kHz |
+| ss | 0.74% | 0.76% | 0.82% | 19.1 kHz | 16.6 kHz | 13.2 kHz |
+| ff | 0.70% | 0.72% | 0.79% | 20.0 kHz | 17.4 kHz | 13.8 kHz |
+| sf | 0.86% | 0.86% | 0.90% | 20.0 kHz | 17.4 kHz | 13.8 kHz |
+| fs | 0.64% | 0.67% | 0.75% | 19.1 kHz | 16.6 kHz | 13.2 kHz |
 
-- **Worst gain error**: 0.91% (SF, 125°C) — within both 1% nominal and 2% PVT limits
-- **Worst BW**: 12.6 kHz (ss/fs, 125°C) — 26% margin above 10 kHz target
+- **Worst gain error**: 0.90% (SF, 125°C) — within both 1% nominal and 2% PVT limits
+- **Worst BW**: 13.2 kHz (ss/fs, 125°C) — 32% margin above 10 kHz target
 - **All 15 conditions PASS**
 
 ## Key Plots
@@ -115,7 +115,7 @@ All gain settings show proper Bode response. GBW ≈ 2 MHz. BW at G=128 is 16.2 
 
 ### Noise Spectrum (TB3)
 ![Noise](plots/noise_spectrum.png)
-1/f dominated noise spectrum. Integrated 0.5–150 Hz: 25.7 µVrms output-referred at gain=1.
+1/f dominated noise spectrum. Integrated 0.5–150 Hz: 23.6 µVrms output-referred at gain=1.
 
 ### THD Analysis (TB4)
 ![THD](plots/thd_analysis.png)
@@ -123,7 +123,7 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 
 ### Step Response (TB5)
 ![Settling](plots/gain_switching.png)
-1 mV step at gain=128. Clean monotonic settling without ringing. Settles to 0.1% within 69.5 µs.
+1 mV step at gain=128. Clean monotonic settling without ringing. Settles to 0.1% within 67.2 µs.
 
 ## Design Rationale
 
@@ -135,7 +135,9 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 
 4. **Miller compensation with nulling resistor**: ~1.46 pF MIM cap provides dominant pole splitting. 1.5kΩ Rz pushes the RHP zero to high frequency.
 
-5. **v2 power optimization**: Reduced M7 (2nd stage load) from W=3u to W=2u, and Cc from 28u×28u to 27u×27u. This saved ~1 µW power while improving bandwidth and settling time. All margins now comfortably above 25%.
+5. **v2 power optimization**: Reduced M7 (2nd stage load) from W=3u to W=2u, and Cc from 28u×28u to 27u×27u. This saved ~1 µW power while improving bandwidth and settling time. Widened diff pair to W=10u for lower 1/f noise. All margins now comfortably above 25%.
+
+6. **Gain error vs THD tradeoff**: Attempts to improve gain error by increasing transistor L (load L=10u or M6 L=10u) consistently broke THD (>0.1%). The current balance point (0.74% error, 0.021% THD) is optimal for this topology.
 
 ## Known Limitations
 
@@ -162,4 +164,5 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 | 10 | 1.00 | 7/7 | Phase B: PVT, output swing, THD sweep, Zout verified |
 | 11 | 1.00 | 7/7 | 0.95uA bias, THD 0.0017% hi-fi measurement |
 | 12 | 1.00 | 7/7 | M6 W=12u → power 8.1uW (19% margin), PVT pass |
-| 13 | 1.00 | 7/7 | **v2: M7 W=2u, Cc=27u² → P=7.0µW (30%), BW=16.2kHz (62%), settling=69.5µs (31%), robustness PASS** |
+| 13 | 1.00 | 7/7 | v2: M7 W=2u, Cc=27u² → P=7.0µW (30%), BW=16.2kHz (62%), settling=69.5µs (31%), robustness PASS |
+| 14 | 1.00 | 7/7 | **v2 final: diff W=10u → noise 23.6µVrms (53%), BW=16.6kHz (66%), settling=67µs (33%), all margins >25%** |

@@ -411,8 +411,8 @@ VDD vdd 0 1.8
 Vcm_sig vcm_sig 0 sin(1.2 0.002 60 0 0)
 
 * ECG signal: simplified QRS complex at 72 BPM (833ms period)
-* PWL: R-peak = 1mV, duration ~80ms, repeated
-Vecg ecg_sig 0 pulse(0 0.001 0 0.02 0.02 0.04 0.833)
+* Smoother pulse for clean transient (5ms rise/fall, 40ms duration)
+Vecg ecg_sig 0 pulse(0 0.001 0 0.005 0.005 0.04 0.833)
 
 * Positive input: CM + ECG/2
 Einp inp_ext 0 vol='v(vcm_sig) + v(ecg_sig)/2'
@@ -439,20 +439,20 @@ CL_p outp 0 1p
 CL_n outn 0 1p
 .ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
 
-.tran 0.1m 2
+* Short sim to verify no saturation (full ECG needs PSS)
+.tran 0.5m 0.2
 
 .control
 run
 let vdiff_out = v(outp) - v(outn)
-let ecg_in = v(ecg_sig)
 
 * Check output swing
 let maxout = maximum(v(outp))
 let minout = minimum(v(outn))
 print maxout minout
 
-set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/ecg_transient vdiff_out title "ECG Transient Output" ylabel "V" xlabel "s"
+* Save data for plotting
+wrdata {PLOTS_DIR}/ecg_transient_raw.csv vdiff_out
 
 quit
 .endc
@@ -470,6 +470,27 @@ quit
             print("  WARNING: Output saturated!")
         else:
             print("  Output within valid range (0.2-1.6V)")
+
+        # Generate matplotlib plot
+        try:
+            import matplotlib
+            matplotlib.use('Agg')
+            import matplotlib.pyplot as plt
+            data = np.loadtxt(f'{PLOTS_DIR}/ecg_transient_raw.csv', skiprows=1)
+            t = data[:, 0]
+            v = data[:, 1]
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ax.plot(t*1000, v*1000, 'b-', linewidth=0.8)
+            ax.set_xlabel('Time (ms)')
+            ax.set_ylabel('Differential Output (mV)')
+            ax.set_title('ECG Transient: 1mV QRS + 2mV 60Hz CM + 300mV Offset')
+            ax.grid(True, alpha=0.3)
+            plt.tight_layout()
+            plt.savefig(f'{PLOTS_DIR}/ecg_transient.png', dpi=150)
+            print("  ECG plot saved")
+        except Exception as e:
+            print(f"  Plot error: {e}")
+
         return {"max_out": maxv, "min_out": minv, "saturated": sat}
     return None
 

@@ -1,0 +1,15 @@
+step	commit	score	specs_met	description
+0	11782fd	0.00	0/6	initial baseline — ngspice path issue, no data produced
+1	1be09ef	0.10	1/6	self-biased BGR without OTA — startup NFET overpowers circuit, Vref=1.78V tracks VDD
+2	88b830e	0.10	1/6	added OTA feedback — startup NFET still overpowers, Vref=1.78V
+3	cb3d3ac	0.70	4/6	removed startup NFET, increased Rout — TC=39ppm, PSRR=40dB, Vref=1.247V
+4	-revert	0.10	1/6	supply-independent OTA bias — removed accidental cancellation, PSRR=38.8dB
+5	-revert	0.25	2/6	doubled mirror L + OTA gain — Vref exceeded 1.25V, TC worsened
+6	-revert	0.45	3/6	Banba topology — PSRR=22dB (worse), startup failed in transient
+7	-revert	0.25	2/6	PMOS diff pair OTA — PSRR=23dB (worse), TC=118ppm
+8	-revert	0.45	3/6	NVT source follower — TC=694ppm, PSRR=24.6dB, follower TC dominates
+9	-revert	-	-	cascode mirror — triode headroom, cascode OTA loads — convergence failure
+10	-revert	-	-	pre-regulated OTA supply — convergence failure
+11	-revert	0.70	4/6	source degeneration — PSRR slightly worse (Rs adds VDD coupling)
+12	-revert	0.25	2/6	CG second gain stage — convergence/startup issues, chicken-and-egg
+13	-revert	0.25	2/6	d1-gated output PMOS — TC=5408ppm, PSRR=-11dB (massive failure)

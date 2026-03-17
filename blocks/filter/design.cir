@@ -1,17 +1,17 @@
-* SKY130 Bandpass Filter — Baseline Design
-* Architecture: Pseudo-resistor HPF (1st order) + Sallen-Key LPF (2nd order Butterworth)
-* Target: f_low < 1 Hz, f_high ~ 150 Hz, passband gain ~ 0 dB (unity)
+* SKY130 Bandpass Filter — Iteration 1
+* Architecture: Pseudo-resistor HPF + 4th-order Sallen-Key LPF
+* Uses two-stage Miller opamp for low output impedance
+* Target: f_low < 1 Hz, f_high ~ 140 Hz, >20 dB at 250 Hz
 *
-* This is the baseline. Expected weaknesses:
-* - Only 2nd order LPF → ~9 dB at 250 Hz (need 20 dB)
-* - Pseudo-resistor value uncertain → f_low may not be < 1 Hz on first try
-* - No noise optimization yet
+* Changes from baseline:
+* - Two-stage Miller-compensated opamp (replaces simple OTA)
+* - 4th-order LPF (two cascaded Sallen-Key stages) for 20 dB at 250 Hz
+* - Proper bias circuit
 
-.lib "sky130_models/sky130.lib.spice" tt
+.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
 
 .param vdd_val = 1.8
 .param vcm_val = 0.9
-.param ibias_val = 500n
 
 **********************************************
 * SUPPLY AND BIAS
@@ -20,90 +20,106 @@ Vdd vdd 0 {vdd_val}
 Vss vss 0 0
 Vcm vcm 0 {vcm_val}
 
-* Bias current mirror reference
-* Generate nbias voltage for OTA tail current sources
-* Using a diode-connected NFET with a resistor from VDD
-Rbias vdd nbias_d 2.4Meg
-Xbias_n nbias_d nbias_d vss vss sky130_fd_pr__nfet_01v8 w=2u l=2u
+* Bias current: ~500 nA via resistor + diode-connected NFET
+Rbias vdd nbias 2.2Meg
+Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 
-* Mirror the bias to get pbias too
-Xbias_p pbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
-Rbias_p pbias vss 2.4Meg
+* PMOS bias mirror
+Xbias_p1 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=4u
+Xbias_p2 nbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=4u
+* pbias_p2 sinks same current as bias through nbias NFET
 
 **********************************************
-* SIMPLE OTA SUBCIRCUIT
+* TWO-STAGE MILLER OPAMP SUBCIRCUIT
 **********************************************
 * Ports: inp(+) inn(-) out vdd vss nbias
-* 5-transistor OTA: PMOS mirror load, NMOS diff pair, NMOS tail
-.subckt simple_ota inp inn out vdd vss nbias
+* Stage 1: PMOS mirror load + NMOS diff pair + NMOS tail
+* Stage 2: PMOS common-source + NMOS current source
+* Miller comp: Cc from stage1 output to stage2 output
+.subckt miller_opamp inp inn out vdd vss nbias
+* --- Stage 1: Differential pair with PMOS mirror ---
 * PMOS current mirror load
-X3 out  gate_m vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=1u
-X4 gate_m gate_m vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=1u
+XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
+XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
 * NMOS differential pair
-X1 gate_m inp tail vss sky130_fd_pr__nfet_01v8 w=2u l=1u
-X2 out    inn tail vss sky130_fd_pr__nfet_01v8 w=2u l=1u
-* NMOS tail current source
-X5 tail nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=2u
-.ends simple_ota
+XM1 s1mir inp tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
+XM2 s1out inn tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
+* NMOS tail current source (~500 nA)
+XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
+
+* --- Stage 2: Common-source output ---
+* PMOS CS amplifier (driven by stage 1 output)
+XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
+* NMOS current source load (~1 µA)
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=4u
+
+* --- Miller compensation ---
+Cc s1out out 3p
+.ends miller_opamp
 
 **********************************************
 * PSEUDO-RESISTOR SUBCIRCUIT
 **********************************************
-* Anti-parallel PMOS pair for bidirectional ultra-high resistance
-* Each PMOS has Vgs ≈ 0 near VCM, giving TΩ-range resistance
+* Anti-parallel PMOS pair — minimum width, long channel for max resistance
+* Vgs ≈ 0 near midpoint gives TΩ-range resistance
 .subckt pseudo_res a b vdd
-Xpr1 a b b vdd sky130_fd_pr__pfet_01v8 w=0.42u l=10u
-Xpr2 b a a vdd sky130_fd_pr__pfet_01v8 w=0.42u l=10u
+Xpr1 a b b vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
+Xpr2 b a a vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
 .ends pseudo_res
 
 **********************************************
-* STAGE 1: HIGH-PASS FILTER
+* STAGE 1: HIGH-PASS FILTER (1st order)
 **********************************************
-* Capacitively-coupled amplifier with pseudo-resistor feedback
+* Capacitively-coupled amplifier with pseudo-resistor DC feedback
 * Gain = C_in / C_fb = 1 (unity)
 * f_low = 1 / (2*pi * R_pseudo * C_fb)
-* Target: f_low ≈ 0.5 Hz → R_pseudo * C_fb ≈ 0.318 s
-* With C_fb = 100 pF, need R_pseudo ≈ 3.18 GΩ
+* With C_fb = 50 pF and R_pseudo targeting ~3 GΩ → f_low ≈ 1 Hz
 
-* Input coupling capacitor
-C_in input hpf_in 100p ic=0
-
-* Pseudo-resistor feedback (sets DC operating point and HPF corner)
+C_in input hpf_in 50p ic=0
 Xpr_fb hpf_in hpf_out vdd pseudo_res
-
-* Feedback capacitor (sets gain with C_in)
-C_fb hpf_in hpf_out 100p ic=0
-
-* OTA1: amplifier (inverting configuration)
-* inp(+) = vcm (reference), inn(-) = hpf_in (signal + feedback)
-Xota1 vcm hpf_in hpf_out vdd vss nbias_d simple_ota
+C_fb hpf_in hpf_out 50p ic=0
+Xamp1 vcm hpf_in hpf_out vdd vss nbias miller_opamp
 
 **********************************************
-* STAGE 2: LOW-PASS FILTER (2nd order Sallen-Key Butterworth)
+* STAGE 2: LOW-PASS FILTER (4th order Sallen-Key Butterworth)
 **********************************************
-* Unity-gain Sallen-Key lowpass, Butterworth (Q = 0.707)
-* For equal R, Butterworth requires C1 = 2*C2
-* f0 = 1/(2*pi*R*sqrt(C1*C2))
+* Two cascaded 2nd-order Sallen-Key sections
+* 4th order Butterworth pole pairs:
+*   Section 1: Q1 = 0.5412, f1 = 140 Hz
+*   Section 2: Q2 = 1.3066, f2 = 140 Hz
 *
-* Design: f0 = 150 Hz
-* C2 = 10 nF, C1 = 20 nF
-* R = 1/(2*pi*f0*sqrt(C1*C2)) = 1/(2*pi*150*sqrt(200e-18))
-*   = 1/(2*pi*150*14.14e-9) = 75.05 kΩ
+* Sallen-Key LPF with equal R:
+*   f0 = 1/(2*pi*R*sqrt(C1*C2))
+*   Q = sqrt(C1/C2) / 2
+*
+* --- Section 1 (Q=0.5412): ---
+* Q = sqrt(C1/C2)/2 = 0.5412 → C1/C2 = (2*0.5412)^2 = 1.1714
+* With R = 200 kΩ:
+*   f0 = 1/(2*pi*200k*sqrt(C1*C2)) = 140 Hz
+*   sqrt(C1*C2) = 1/(2*pi*200k*140) = 5.684 nF
+*   C1*C2 = 32.31 nF²
+*   C1 = 1.1714 * C2 → 1.1714*C2² = 32.31 → C2 = 5.252 nF, C1 = 6.153 nF
+R_s1a hpf_out s1_mid 200k
+R_s1b s1_mid s1_in 200k
+C_s1a s1_mid s1_out 6.2n
+C_s1b s1_in vcm 5.2n
+Xamp2 s1_in s1_out s1_out vdd vss nbias miller_opamp
 
-R_sk1 hpf_out sk_mid 75k
-R_sk2 sk_mid sk_buf_in 75k
-C_sk1 sk_mid lpf_out 20n
-C_sk2 sk_buf_in vcm 10n
-
-* OTA2: unity-gain buffer for Sallen-Key
-Xota2 sk_buf_in lpf_out lpf_out vdd vss nbias_d simple_ota
+* --- Section 2 (Q=1.3066): ---
+* Q = sqrt(C1/C2)/2 = 1.3066 → C1/C2 = (2*1.3066)^2 = 6.829
+* With R = 200 kΩ:
+*   sqrt(C1*C2) = 5.684 nF (same f0)
+*   C1 = 6.829*C2 → 6.829*C2² = 32.31 → C2 = 2.175 nF, C1 = 14.86 nF
+R_s2a s1_out s2_mid 200k
+R_s2b s2_mid s2_in 200k
+C_s2a s2_mid s2_out 15n
+C_s2b s2_in vcm 2.2n
+Xamp3 s2_in s2_out s2_out vdd vss nbias miller_opamp
 
 **********************************************
 * OUTPUT
 **********************************************
-* Output node
-.global output
-Rout lpf_out output 100
+Rout s2_out output 100
 
 **********************************************
 * INPUT SOURCE (overridden by evaluate.py)

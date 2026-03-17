@@ -36,6 +36,13 @@ def run_ngspice(netlist_str, timeout=300):
     except subprocess.TimeoutExpired:
         return "TIMEOUT", -1
 
+def strip_final_end(netlist_text):
+    """Remove the final .end line without touching .ends in subcircuits."""
+    lines = netlist_text.rstrip().split('\n')
+    if lines[-1].strip() == '.end':
+        lines = lines[:-1]
+    return '\n'.join(lines) + '\n'
+
 def read_wrdata(filename, complex_data=False):
     """Read ngspice wrdata output. Returns dict of arrays."""
     data = []
@@ -89,8 +96,12 @@ def tb1_frequency_response():
     with open('design.cir', 'r') as f:
         base_netlist = f.read()
 
-    # Remove the .end and add AC analysis
-    netlist = base_netlist.replace('.end', '')
+    # Remove the final .end (but not .ends) and add AC analysis
+    # Find the last .end that's on its own line
+    lines = base_netlist.rstrip().split('\n')
+    if lines[-1].strip() == '.end':
+        lines = lines[:-1]
+    netlist = '\n'.join(lines) + '\n'
     netlist += """
 * TB1: AC Frequency Response
 .ac dec 200 0.01 100k
@@ -276,7 +287,7 @@ def tb3_step_response():
         'Vin input vcm dc 0 ac 1',
         'Vin input vcm dc 0 PULSE(0 0.3 0.1 1u 1u 10 20)'
     )
-    netlist = netlist.replace('.end', '')
+    netlist = strip_final_end(netlist)
     netlist += """
 * TB3: Step Response
 .tran 10m 10 0 10m uic
@@ -388,7 +399,7 @@ def measure_power():
     with open('design.cir', 'r') as f:
         base_netlist = f.read()
 
-    netlist = base_netlist.replace('.end', '')
+    netlist = strip_final_end(base_netlist)
     netlist += """
 * Power measurement
 .op
@@ -451,7 +462,7 @@ def tb5_noise():
     with open('design.cir', 'r') as f:
         base_netlist = f.read()
 
-    netlist = base_netlist.replace('.end', '')
+    netlist = strip_final_end(base_netlist)
     netlist += """
 * TB5: Noise Analysis
 .noise v(output) Vin dec 50 0.1 10k
@@ -504,7 +515,7 @@ quit
             pb_mask = (freq >= 0.5) & (freq <= 150)
             if np.any(pb_mask):
                 # noise_psd is in V/sqrt(Hz), integrate PSD = noise^2
-                noise_v2_pb = np.trapz(noise_psd[pb_mask]**2, freq[pb_mask])
+                noise_v2_pb = np.trapezoid(noise_psd[pb_mask]**2, freq[pb_mask])
                 noise_uvrms = np.sqrt(noise_v2_pb) * 1e6
             else:
                 noise_uvrms = 999

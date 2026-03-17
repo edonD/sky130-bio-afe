@@ -102,7 +102,7 @@ Cvref vref vss {p_cap}
 * Tail bias (from VDD through resistor)
 XMN_bias ota_bias ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
 XMN_tail ota_tail ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
-XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=200e-6 mult=1
+XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=400e-6 mult=1
 
 * Diff pair: + = node_b, - = node_a (node_b > node_a → output UP → PMOS OFF)
 XMN_p ota_outn node_b ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1

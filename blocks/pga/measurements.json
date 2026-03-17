@@ -1,0 +1,9 @@
+{
+  "gain_settings": 8,
+  "gain_error_pct": 0.8748599401719015,
+  "bandwidth_hz": 15488.1662,
+  "power_uw": 7.383960000000001,
+  "output_noise_uvrms": 25.60201,
+  "thd_pct": 0.08858712529634893,
+  "settling_time_us": 71.46476
+}

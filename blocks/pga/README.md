@@ -141,6 +141,15 @@ With 1kΩ InAmp source impedance in series at G=128: gain drops from 127.2 to 12
 
 Well within the <10 kΩ interface requirement for driving the filter block.
 
+### Noise vs Temperature
+| Temperature | Output Noise (gain=1) |
+|------------|----------------------|
+| -40°C | 24.1 µVrms |
+| 27°C | 25.7 µVrms |
+| 125°C | 28.5 µVrms |
+
+All within 50 µVrms target with >43% margin at worst case.
+
 ### Power Supply Rejection (PSRR)
 At gain=128: PSRR = -24.7 dB (DC through 60 Hz). This is limited by the ideal current source which has zero supply rejection. In the integrated system, the bandgap reference (target >60 dB PSRR) would dominate, making system PSRR much better. For standalone PGA testing, VDD should be clean or well-decoupled.
 

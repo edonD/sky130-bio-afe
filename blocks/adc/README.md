@@ -192,12 +192,11 @@ Robust across full ±10% supply range.
    analytically in Python. This misses charge injection from switches, clock
    feedthrough, finite switch resistance, and capacitor nonlinearity.
 
-3. **Comparator noise is a critical margin**: The design passes at noise up to
-   0.5 mV (ENOB > 10, noise < 1.5 LSB). At 0.7 mV, ENOB drops to 9.6 (fail).
-   Theoretical estimate: 0.3-0.7 mV depending on gm and integration time.
-   The 0.3 mV model in evaluation is at the optimistic end. Larger input pair
-   (W=4µm) or longer integration time would reduce noise. SPICE doesn't
-   simulate thermal noise without special setup.
+3. **Comparator noise**: SPICE gm extraction gives gm=1.01 mA/V for W=3µm at
+   VGS=0.9V. With ~200 ps integration time (half of 0.4 ns delay), noise ≈
+   0.23 mV = 0.53 LSB. This validates the 0.3 mV model used in evaluation.
+   Design passes at noise up to 0.5 mV (ENOB > 10). SPICE doesn't simulate
+   thermal noise without special setup, so noise is modeled analytically.
 
 4. **No reference droop**: The reference voltage is assumed ideal.
 

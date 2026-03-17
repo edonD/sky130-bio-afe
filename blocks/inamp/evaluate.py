@@ -380,6 +380,90 @@ quit
     return None
 
 
+# ── TB7: Realistic ECG Transient ──────────────────────────────
+def tb7_ecg_transient():
+    """Synthetic ECG + 60 Hz interference + 300 mV electrode offset."""
+    print("\n>>> TB7: Realistic ECG Transient")
+    # ECG: 1mV R-peak, 72 BPM (833ms period), simplified QRS
+    # Electrode offset: +300 mV DC
+    # 60 Hz interference: 2 mV amplitude
+    # Signal on both inputs: CM = 0.9V + 300mV offset + 60Hz
+    # Differential: 1mV ECG pulse
+
+    net = HDR + OTA + f"""
+.param cin_v  = 60p
+.param cfb_v  = 1p
+
+VDD vdd 0 1.8
+
+* Common-mode: 1.2V (0.9V + 300mV electrode offset)
+* Plus 2 mV 60 Hz interference (common-mode)
+Vcm_sig vcm_sig 0 sin(1.2 0.002 60 0 0)
+
+* ECG signal: simplified QRS complex at 72 BPM (833ms period)
+* PWL: R-peak = 1mV, duration ~80ms, repeated
+Vecg ecg_sig 0 pulse(0 0.001 0 0.02 0.02 0.04 0.833)
+
+* Positive input: CM + ECG/2
+Einp inp_ext 0 vol='v(vcm_sig) + v(ecg_sig)/2'
+* Negative input: CM - ECG/2
+Einn inn_ext 0 vol='v(vcm_sig) - v(ecg_sig)/2'
+
+* Input coupling
+Cin_p inp_ext gp {{cin_v}}
+Cin_n inn_ext gn {{cin_v}}
+
+* DC bias
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
+Vcm vcm 0 0.9
+
+* Feedback
+Cfb_p outp gp {{cfb_v}}
+Cfb_n outn gn {{cfb_v}}
+Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
+Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
+
+Xota gp gn outp outn vdd 0 fd_ota
+CL_p outp 0 1p
+CL_n outn 0 1p
+.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
+
+.tran 0.1m 2
+
+.control
+run
+let vdiff_out = v(outp) - v(outn)
+let ecg_in = v(ecg_sig)
+
+* Check output swing
+let maxout = maximum(v(outp))
+let minout = minimum(v(outn))
+print maxout minout
+
+set gnuplot_terminal=png
+gnuplot {PLOTS_DIR}/ecg_transient vdiff_out title "ECG Transient Output" ylabel "V" xlabel "s"
+
+quit
+.endc
+.end
+"""
+    out = run_ngspice(net, timeout=300)
+    print(out[-1500:])
+    maxv = grab(out, "maxout")
+    minv = grab(out, "minout")
+    if maxv is not None:
+        print(f"  Max output: {maxv:.4f} V")
+        print(f"  Min output: {minv:.4f} V")
+        sat = maxv > 1.6 or minv < 0.2
+        if sat:
+            print("  WARNING: Output saturated!")
+        else:
+            print("  Output within valid range (0.2-1.6V)")
+        return {"max_out": maxv, "min_out": minv, "saturated": sat}
+    return None
+
+
 # ── Scoring ───────────────────────────────────────────────────
 def score_results(meas):
     print("\n" + "=" * 60)
@@ -457,6 +541,9 @@ def main():
 
     # TB6: Electrode offset
     tb6_electrode()
+
+    # TB7: ECG transient
+    tb7_ecg_transient()
 
     # Power
     r = measure_power()

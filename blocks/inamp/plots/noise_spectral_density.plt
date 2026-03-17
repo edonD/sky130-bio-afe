@@ -5,11 +5,11 @@ set xlabel "Hz"
 set ylabel "V/rtHz"
 set grid
 set logscale x
-set xrange [1e-01:1e+05]
+set xrange [1e-01:1e+03]
 set mxtics 10
 set grid mxtics
 unset logscale y 
-set yrange [-9.793789e-06:3.519321e-04]
+set yrange [1.096558e-06:4.681545e-05]
 #set xtics 1
 #set x2tics 1
 #set ytics 1

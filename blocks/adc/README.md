@@ -13,9 +13,9 @@
 ### Comparator Topology
 
 Standard StrongARM with separated regeneration:
-- NMOS tail (W=4µm) clocked by CLK
-- NMOS input pair (W=2µm) with drains to internal nodes fn/fp
-- NMOS cross-coupled latch (W=1µm) sources connected to fn/fp (disabled during reset)
+- NMOS tail (W=6µm) clocked by CLK
+- NMOS input pair (W=3µm) with drains to internal nodes fn/fp
+- NMOS cross-coupled latch (W=2µm) sources connected to fn/fp (disabled during reset)
 - PMOS reset switches (W=1µm) pull outputs to VDD when CLK=0
 - PMOS cross-coupled latch (W=1µm) for regeneration
 
@@ -217,3 +217,4 @@ Robust across full ±10% supply range.
 | 6 | 1.00 | 6/6 | Extended MC 500 runs: 100% yield, p99 DNL=0.376, p1 ENOB=10.18 |
 | 7 | 1.00 | 6/6 | Area optimization: 5.5um min viable (100% yield), 70% area savings |
 | 8 | DISC | - | W=4u input pair: lower noise but 3/15 PVT failures. Reverted. |
+| 9 | 1.00 | 6/6 | W_in=3u, W_n=2u: 27% faster, 40% better PVT, same yield |

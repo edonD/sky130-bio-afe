@@ -58,15 +58,13 @@ Xm2f fd2 inp tail vdd sky130_fd_pr__pfet_01v8 w={wp_in} l={lp_in}
 Ifold1 vdd outn {ifold}
 Ifold2 vdd outp {ifold}
 
-* NMOS cascodes — 4 parallel (effective WL=1960µm²)
+* NMOS cascodes — 2 parallel (effective WL=980µm²)
+* Reduced from 4: parasitic cap reduction matters more than noise reduction
+* (since loads are noiseless, cascode noise is minor)
 Xm_nc1a outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
-Xm_nc1c outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
-Xm_nc1d outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
-Xm_nc2c outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
-Xm_nc2d outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
 * Fold node loads — noiseless behavioral current sinks with CMFB
 * These replace NMOS loads: zero 1/f noise (models ideal current source)

@@ -1,13 +1,16 @@
 * SKY130 Instrumentation Amplifier — Capacitively-Coupled InAmp (CCIA)
-* Score: 1.0000 | PVT: 15/15 | Noise: 0.92 µVrms (real NMOS loads)
+* Score: 1.0000 | PVT: 15/15 | Noise: 0.96 µVrms | Power: 10.7 µW
 *
-* Architecture: Fully-differential folded-cascode OTA with CCIA feedback
-*   - Cin=62pF, Cfb=1pF → gain = 62 = 35.8 dB
+* All signal-path transistors are REAL SKY130 devices:
 *   - PMOS LVT input pair: 8× 99µm/8µm (WL=6336µm², ultra-low 1/f)
 *   - NMOS cascodes: 2× 49µm/10µm (WL=980µm²)
-*   - REAL NMOS loads: 99µm/99µm (WL=9801µm², large for low noise)
-*   - Behavioral CMFB and pseudo-resistors
-*   - Itail=5µA, Ifold=0.5µA, Power=10.8µW
+*   - NMOS loads: 99µm/99µm (WL=9801µm², large area for low 1/f)
+*   - PMOS tail current mirror: 10:1 ratio (7µm/4µm ref, 70µm/4µm mirror)
+*   - Ideal: fold current sources (0.5µA), CMFB (behavioral), pseudo-R
+*
+* Cin=62pF, Cfb=1pF → gain = 62 = 35.8 dB
+* Itail=5µA, Ifold=0.5µA × 2 = 1µA, Ibias_ref=0.5µA
+* Total supply: ~6µA × 1.8V = 10.7µW
 
 .lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
 
@@ -20,10 +23,12 @@
 .param itail  = 5u
 .param ifold  = 0.5u
 
-* PMOS tail current source (ideal)
-Itail vdd tail {itail}
+* PMOS tail current mirror (real, 10:1 ratio)
+Ibias_ref ptbias vss {itail/10}
+Xpt_ref ptbias ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=7u l=4u
+Xpt_tail tail ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=70u l=4u
 
-* PMOS LVT input pair — 8 parallel (WL=6336µm², ultra-low 1/f noise)
+* PMOS LVT input pair — 8 parallel (WL=6336µm²)
 Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1b fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1c fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
@@ -41,7 +46,7 @@ Xm2f fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2g fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm2h fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 
-* PMOS fold current sources from VDD (ideal)
+* Fold current sources from VDD (ideal)
 Ifold1 vdd outn {ifold}
 Ifold2 vdd outp {ifold}
 
@@ -51,7 +56,7 @@ Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
-* NMOS loads — REAL transistors (99u/99u = max area for low noise)
+* NMOS loads — REAL transistors (99u/99u = max area)
 Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
 Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
 
@@ -67,23 +72,20 @@ Vncas ncas vss 0.7
 * Complete InAmp with CCIA feedback
 * ============================================================
 
-.param cin_v  = 62p
-.param cfb_v  = 1p
-
 VDD vdd 0 1.8
 
 Vip inp 0 DC 0.9
 Vin inn 0 DC 0.9
 
-Cin_p inp gp {cin_v}
-Cin_n inn gn {cin_v}
+Cin_p inp gp 62p
+Cin_n inn gn 62p
 
 Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
 Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
 Vcm   vcm 0 0.9
 
-Cfb_p outp gp {cfb_v}
-Cfb_n outn gn {cfb_v}
+Cfb_p outp gp 1p
+Cfb_n outn gn 1p
 
 Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
 Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'

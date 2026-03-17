@@ -65,7 +65,8 @@ Primary DNL/INL measured with one instance of mismatched DAC capacitors.
 | Max INL | 0.147 LSB | 0.052 | 0.313 LSB | < 2.0 | 100% |
 | ENOB | 10.25 bits | 0.03 | 10.14 bits | > 10 | 100% |
 
-No missing codes in any of 200 Monte Carlo runs. 100% yield on all specs.
+No missing codes in any run. Extended to 500 runs: still 100% yield on all specs.
+p99 DNL = 0.376 LSB. p1 ENOB = 10.18 bits. Both with comfortable margin.
 
 ## PVT Corner Results (5 corners × 3 temps)
 
@@ -205,4 +206,6 @@ Robust across full ±10% supply range.
 | 1 | 1.00 | 6/6 | Fixed StrongARM, wrdata parser, delay measurement |
 | 2 | 1.00 | 6/6 | Phase B: MC (200 runs, 100% yield), PVT (15/15 pass) |
 | 3 | 1.00 | 6/6 | Cap sensitivity (7µm min viable), supply ±10% pass |
-| 4 | 1.00 | 6/6 | VCM offset model: 10 missing codes at extremes, OK for bio app |
+| 4 | 1.00 | 6/6 | VCM offset model: charge redistribution keeps VCM stable |
+| 5 | 1.00 | 6/6 | Combined stress (mismatch+noise+VCM): ENOB 10.53-10.62 |
+| 6 | 1.00 | 6/6 | Extended MC 500 runs: 100% yield, p99 DNL=0.376, p1 ENOB=10.18 |

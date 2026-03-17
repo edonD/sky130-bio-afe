@@ -218,3 +218,4 @@ Robust across full ±10% supply range.
 | 7 | 1.00 | 6/6 | Area optimization: 5.5um min viable (100% yield), 70% area savings |
 | 8 | DISC | - | W=4u input pair: lower noise but 3/15 PVT failures. Reverted. |
 | 9 | 1.00 | 6/6 | W_in=3u, W_n=2u: 27% faster, 40% better PVT, same yield |
+| 10 | 1.00 | 6/6 | Combined worst case (ss/-40C/1.62V): correct. Min CLK: 1ns. |

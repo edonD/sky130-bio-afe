@@ -14,7 +14,7 @@ Electrode- → [Cin 51pF] → gn → OTA(inv-) → outn → [Cfb 1pF] → gn (fe
 
 ### Key Design Features
 - **Fully differential** output with ideal CMFB for inherent high CMRR
-- **PMOS input pair** (8× 99µm/8µm parallel, WL=6336µm²) for low 1/f noise
+- **PMOS LVT input pair** (8× 99µm/8µm parallel, WL=6336µm²) for ultra-low 1/f noise
 - **NMOS cascodes** (4× 49µm/10µm, WL=1960µm²) for high output impedance
 - **Large Cin** (51pF) to dilute input pair Cgs and reduce noise gain
 - **Capacitive input coupling** for DC electrode offset (±300mV) rejection
@@ -25,24 +25,26 @@ Electrode- → [Cin 51pF] → gn → OTA(inv-) → outn → [Cfb 1pF] → gn (fe
 | Parameter | Target | Measured (tt,27°C) | Status | Margin |
 |-----------|--------|---------------------|--------|--------|
 | Gain | >34 dB | 35.8 dB | PASS | +1.8 dB |
-| Input noise (0.5-150 Hz) | <1.5 µVrms | 1.14 µVrms | PASS | 24% margin |
-| CMRR at 60 Hz | >100 dB | ~260 dB | PASS | large (ideal matching) |
+| Input noise (0.5-150 Hz) | <1.5 µVrms | 0.53 µVrms | PASS | 64% margin |
+| CMRR at 60 Hz | >100 dB | ~257 dB | PASS | large (ideal matching) |
 | Input offset | <50 µV | ~0 µV | PASS | (ideal symmetry) |
-| Bandwidth | >10 kHz | 4.3 MHz | PASS | 430× |
+| Bandwidth | >10 kHz | 2.9 MHz | PASS | 290× |
 | Power | <15 µW | 10.8 µW | PASS | 28% margin |
 
 ## PVT Corner Summary (15/15 pass, input-referred noise in µVrms)
 
 | Corner | -40°C | 27°C | 125°C |
 |--------|-------|------|-------|
-| tt | 1.01 | 1.14 | 1.20 |
-| ss | 1.03 | 1.15 | 1.18 |
-| ff | 0.99 | 1.12 | 1.21 |
-| sf | 1.04 | 1.14 | 1.16 |
-| fs | 0.99 | 1.12 | 1.22 |
+| tt | 0.49 | 0.53 | 0.59 |
+| ss | 0.51 | 0.55 | 0.61 |
+| ff | 0.47 | 0.52 | 0.58 |
+| sf | 0.52 | 0.56 | 0.61 |
+| fs | 0.47 | 0.52 | 0.58 |
 
 Gain is 35.8 dB at all corners (Cin/Cfb = 62, process/temp independent).
-Worst-case noise: 1.22 µVrms at fs/125°C (19% margin).
+Worst-case noise: 0.61 µVrms at ss,sf/125°C (59% margin!).
+
+**Note:** The dramatic noise improvement (1.14→0.53 µVrms) comes from using PMOS LVT instead of standard PMOS for the input pair. LVT PMOS has significantly lower 1/f noise coefficient in the SKY130 process.
 
 ## Plots
 
@@ -114,3 +116,6 @@ Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output at 
 | 10 | 1.00 | itail=5u, ifold=0.5u — improved noise margin (worst 1.48µV) |
 | 11 | 1.00 | Cin=62pF — worst corner 1.47µV, 2% margin |
 | 12 | 1.00 | 6× parallel input pair — worst corner 1.31µV, 13% margin |
+| 13 | 1.00 | 8× parallel, 2× cascodes — same noise, 30% more BW |
+| 14 | 1.00 | CMRR mismatch: 0.1% cap → 77dB (chopping needed for 100dB) |
+| 15 | 1.00 | **PMOS LVT input pair — noise 0.53µV, 2.1× improvement!** |

@@ -627,26 +627,22 @@ def tb4_ecg_transient():
     # Simple ECG: 1 mV R-peak, 70 BPM (period = 0.857s)
     # Plus 50 µV of 60 Hz interference
     # ECG shape: triangular R-peak approximation
-    dt = 0.001  # 1 ms resolution
-    t_total = 3.0  # 3 seconds
+    dt = 0.0005  # 0.5 ms resolution
+    t_total = 5.0  # 5 seconds (longer for settling)
     n_pts = int(t_total / dt)
     t = np.linspace(0, t_total, n_pts)
 
-    # Simple ECG model: sharp R-peak every 0.857s
+    # Realistic ECG model: Gaussian R-peak (40ms FWHM), 72 BPM
     ecg = np.zeros_like(t)
     period = 60.0 / 72  # 72 BPM = 0.833s period
-    for beat_time in np.arange(0.2, t_total, period):
-        # R-peak: triangular, 20ms wide, 1 mV amplitude
-        mask = np.abs(t - beat_time) < 0.010
-        ecg[mask] = 1e-3 * (1 - np.abs(t[mask] - beat_time) / 0.010)
-        # P-wave: 5ms before R, 0.15 mV
-        p_time = beat_time - 0.06
-        mask_p = np.abs(t - p_time) < 0.020
-        ecg[mask_p] += 0.15e-3 * np.cos(np.pi * (t[mask_p] - p_time) / 0.040)
-        # T-wave: 0.15s after R, 0.3 mV
-        t_time = beat_time + 0.15
-        mask_t = np.abs(t - t_time) < 0.060
-        ecg[mask_t] += 0.3e-3 * np.cos(np.pi * (t[mask_t] - t_time) / 0.120)
+    sigma_r = 0.012  # ~28ms FWHM for QRS, bandwidth < 100 Hz
+    for beat_time in np.arange(0.5, t_total, period):
+        # R-peak: Gaussian, 1 mV amplitude
+        ecg += 1e-3 * np.exp(-0.5 * ((t - beat_time) / sigma_r)**2)
+        # P-wave: 160ms before R, 0.15 mV, wider Gaussian
+        ecg += 0.15e-3 * np.exp(-0.5 * ((t - (beat_time - 0.16)) / 0.025)**2)
+        # T-wave: 200ms after R, 0.3 mV, wide Gaussian
+        ecg += 0.3e-3 * np.exp(-0.5 * ((t - (beat_time + 0.20)) / 0.050)**2)
 
     # Add 60 Hz interference (50 µV amplitude)
     interference = 50e-6 * np.sin(2 * np.pi * 60 * t)
@@ -662,7 +658,7 @@ def tb4_ecg_transient():
     netlist = strip_final_end(netlist)
     netlist += """
 * TB4: ECG Transient
-.tran 0.5m 3 0 0.5m
+.tran 0.5m 5 0 0.5m
 
 .control
 run
@@ -697,13 +693,28 @@ quit
     time_out = time_out[unique_idx]
     vout = vout[unique_idx]
 
+    # Only analyze the last 3 seconds (after settling)
+    settle_mask = time_out > 2.0
+    if np.any(settle_mask):
+        time_out = time_out[settle_mask]
+        vout = vout[settle_mask]
+
     # Remove DC offset (VCM)
     vout_ac = vout - np.mean(vout)
 
-    # Find R-peaks in output
+    # Find R-peaks in output (may be inverted due to -C_in/C_fb gain)
     from scipy.signal import find_peaks
-    # R-peaks should be the tallest peaks
-    peaks_out, props = find_peaks(vout_ac, height=0.1e-3, distance=int(0.5/0.001))
+    # Check if signal is inverted (look at both positive and negative peaks)
+    peaks_pos, _ = find_peaks(vout_ac, height=0.05e-3, distance=int(0.3/0.0005))
+    peaks_neg, _ = find_peaks(-vout_ac, height=0.05e-3, distance=int(0.3/0.0005))
+    # Use whichever has larger peaks (inverted or non-inverted)
+    if len(peaks_neg) > 0 and (len(peaks_pos) == 0 or
+        np.max(np.abs(vout_ac[peaks_neg])) > np.max(np.abs(vout_ac[peaks_pos]))):
+        peaks_out = peaks_neg
+        vout_ac = -vout_ac  # flip for consistent positive peak analysis
+        print("  (Signal inverted by filter — using |output| for R-peak detection)")
+    else:
+        peaks_out = peaks_pos
 
     # Expected R-peak amplitude (input = 1 mV, filter gain ≈ 1)
     expected_rpeak = 1e-3

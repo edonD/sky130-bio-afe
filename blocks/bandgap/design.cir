@@ -55,7 +55,7 @@
 * === Parameters ===
 .param p_wp_pass = 8e-6
 .param p_lp_pass = 1e-6
-.param p_ra_l = 118e-6
+.param p_ra_l = 113e-6
 .param p_rptat_l = 12e-6
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
@@ -73,7 +73,8 @@ VSS vss 0 DC 0
 
 * === PMOS Pass Transistor (LDO-style output) ===
 * Gate driven by op-amp output. V_REF is the regulated output.
-XMP_pass vref opamp_out vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_pass} l={p_lp_pass} m=8
+* PMOS pass transistor (standard Vt)
+XMP_pass vref opamp_out vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_pass} l={p_lp_pass} m=4
 
 * === Branch A: Ra + Q1 (1x PNP) ===
 * Current I_a = (V_REF - Vbe1) / Ra
@@ -103,9 +104,9 @@ XMN_bias ota_bias ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln
 XMN_tail ota_tail ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
 XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=200e-6 mult=1
 
-* Diff pair: + = node_a, - = node_b
-XMN_p ota_outn node_a ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
-XMN_n ota_outp node_b ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
+* Diff pair: + = node_b, - = node_a (node_b > node_a → output UP → PMOS OFF)
+XMN_p ota_outn node_b ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
+XMN_n ota_outp node_a ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
 
 * PMOS active load
 XMP_ln ota_outn ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ota} m=1
@@ -120,7 +121,7 @@ Ccomp opamp_out vss 1p
 .option reltol=0.003 abstol=1e-12 gmin=1e-12 method=gear
 .option itl1=500 itl2=200 rshunt=1e9
 * Strong initial conditions for convergence across temperature
-.nodeset v(vref)=1.18 v(node_a)=0.69 v(node_b)=0.69 v(opamp_out)=0.7
+.nodeset v(vref)=1.16 v(node_a)=0.69 v(node_b)=0.69 v(opamp_out)=1.3
 + v(ota_outn)=0.7 v(ota_outp)=0.7 v(ota_tail)=0.05 v(ota_bias)=0.8
 + v(eb)=0.64
 

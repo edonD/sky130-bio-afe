@@ -440,27 +440,74 @@ quit
 
 
 # =============================================================================
+# Capacitor mismatch model (SKY130 MIM cap Pelgrom)
+# =============================================================================
+# SKY130 MIM cap: A_c = 2.8 %·um (from PDK dev/gauss expression)
+# sigma(C)/C = A_c / sqrt(W * L) where W, L in um
+# For 10x10 um unit cap: sigma/C = 2.8% / sqrt(100) = 0.28%
+CAP_MISMATCH_AC = 2.8  # %·um
+CAP_UNIT_W_UM = 10.0   # unit cap width (um)
+CAP_UNIT_L_UM = 10.0   # unit cap length (um)
+CAP_UNIT_SIGMA = CAP_MISMATCH_AC / 100.0 / np.sqrt(CAP_UNIT_W_UM * CAP_UNIT_L_UM)
+
+
+def generate_mismatched_caps(n_bits, sigma_ratio=CAP_UNIT_SIGMA):
+    """Generate binary-weighted capacitor values with Pelgrom mismatch.
+    Returns array of actual cap values (normalized to ideal unit cap = 1)."""
+    # For binary-weighted DAC: C_k = 2^k * C_unit, k=0..N-1, plus dummy C_unit
+    # Each cap is a sum of 2^k unit caps, each with independent mismatch
+    # sigma(C_k)/C_k = sigma_unit / sqrt(2^k)
+    caps = np.zeros(n_bits)
+    for k in range(n_bits):
+        n_units = 2**k
+        # Each unit cap has independent mismatch
+        unit_caps = 1.0 + np.random.normal(0, sigma_ratio, n_units)
+        caps[k] = np.sum(unit_caps)
+    return caps
+
+
+# =============================================================================
 # SAR Algorithm (Python)
 # =============================================================================
-def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0):
-    """Simulate one SAR conversion with ideal DAC.
+def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,
+                cap_weights=None):
+    """Simulate one SAR conversion.
+    cap_weights: actual capacitor values (if None, ideal binary-weighted).
     Returns the digital output code (0 to 2^n - 1)."""
-    code = 0
-    for i in range(n_bits - 1, -1, -1):
-        code |= (1 << i)  # Try setting this bit
-        v_dac = v_ref * code / (2**n_bits)
-        # Add comparator noise (random offset per comparison)
-        noise = np.random.normal(0, comp_noise_rms) if comp_noise_rms > 0 else 0
-        if v_in < (v_dac + comp_offset + noise):
-            code &= ~(1 << i)  # Input is lower, clear the bit
-    return code
+    if cap_weights is None:
+        # Ideal: each bit weight is exactly 2^k / 2^N
+        code = 0
+        for i in range(n_bits - 1, -1, -1):
+            code |= (1 << i)
+            v_dac = v_ref * code / (2**n_bits)
+            noise = np.random.normal(0, comp_noise_rms) if comp_noise_rms > 0 else 0
+            if v_in < (v_dac + comp_offset + noise):
+                code &= ~(1 << i)
+        return code
+    else:
+        # With mismatch: DAC voltage depends on actual cap weights
+        c_total = np.sum(cap_weights) + 1.0  # +1 for dummy cap
+        bits = np.zeros(n_bits, dtype=int)
+        for i in range(n_bits - 1, -1, -1):
+            bits[i] = 1  # Trial
+            # DAC voltage = sum(bit[k] * cap[k]) / C_total * VREF
+            v_dac = v_ref * np.sum(bits * cap_weights) / c_total
+            noise = np.random.normal(0, comp_noise_rms) if comp_noise_rms > 0 else 0
+            if v_in < (v_dac + comp_offset + noise):
+                bits[i] = 0  # Clear
+        code = 0
+        for i in range(n_bits):
+            code |= (bits[i] << i)
+        return code
 
 
-def sar_convert_batch(v_in_array, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0):
-    """Vectorized SAR conversion for an array of input voltages."""
+def sar_convert_batch(v_in_array, v_ref, n_bits, comp_offset=0.0,
+                      comp_noise_rms=0.0, cap_weights=None):
+    """SAR conversion for an array of input voltages."""
     codes = np.zeros(len(v_in_array), dtype=int)
     for idx, v_in in enumerate(v_in_array):
-        codes[idx] = sar_convert(v_in, v_ref, n_bits, comp_offset, comp_noise_rms)
+        codes[idx] = sar_convert(v_in, v_ref, n_bits, comp_offset,
+                                 comp_noise_rms, cap_weights)
     return codes
 
 
@@ -745,6 +792,256 @@ def measure_noise(comp_offset=0.0):
 
 
 # =============================================================================
+# TB7: Monte Carlo (Capacitor Mismatch)
+# =============================================================================
+def monte_carlo_mismatch(comp_offset=0.0, n_runs=200):
+    """Run Monte Carlo with capacitor mismatch. Report DNL/INL/ENOB spread."""
+    print(f"\n=== TB7a: Monte Carlo — {n_runs} runs ===")
+    print(f"  Unit cap: {CAP_UNIT_W_UM}x{CAP_UNIT_L_UM} um, sigma/C = {CAP_UNIT_SIGMA*100:.3f}%")
+
+    all_dnl_max = []
+    all_inl_max = []
+    all_enob = []
+    all_missing = []
+
+    comp_noise_rms_v = 0.3e-3
+
+    for run in range(n_runs):
+        caps = generate_mismatched_caps(NBITS)
+
+        # Quick DNL/INL measurement (fewer points for speed)
+        n_pts = NCODES * 4
+        v_in = np.linspace(0, VREF, n_pts, endpoint=False)
+        codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, 0, caps)
+
+        # Find transitions
+        transitions = np.zeros(NCODES)
+        for k in range(NCODES):
+            indices = np.where(codes == k)[0]
+            if len(indices) > 0:
+                transitions[k] = v_in[indices[0]]
+            else:
+                transitions[k] = np.nan
+
+        # DNL
+        dnl = np.full(NCODES, np.nan)
+        ideal_width = VREF / NCODES
+        for k in range(1, NCODES - 1):
+            if not np.isnan(transitions[k]) and not np.isnan(transitions[k + 1]):
+                code_width = transitions[k + 1] - transitions[k]
+                dnl[k] = code_width / ideal_width - 1.0
+
+        valid_dnl = dnl[~np.isnan(dnl)]
+        dnl_max = np.max(np.abs(valid_dnl)) if len(valid_dnl) > 0 else 999
+        missing = int(np.sum(dnl[1:-1] <= -0.99)) if len(valid_dnl) > 0 else NCODES
+
+        # INL
+        inl = np.nancumsum(dnl[1:])
+        if len(inl) > 0:
+            slope = inl[-1] / len(inl) if len(inl) > 0 else 0
+            inl_corr = inl - slope * np.arange(len(inl))
+            inl_max = np.max(np.abs(inl_corr))
+        else:
+            inl_max = 999
+
+        # Quick ENOB (shorter FFT for speed)
+        nfft = 1024
+        m_cycles = 31  # prime
+        f_in = m_cycles * FS_HZ / nfft
+        amplitude = 0.45 * VREF
+        t = np.arange(nfft) / FS_HZ
+        v_sine = VREF / 2 + amplitude * np.sin(2 * np.pi * f_in * t)
+        codes_sine = sar_convert_batch(v_sine, VREF, NBITS, comp_offset,
+                                       comp_noise_rms_v, caps)
+        window = np.hanning(nfft)
+        spec = np.fft.rfft((codes_sine - np.mean(codes_sine)) * window)
+        pwr = np.abs(spec)**2
+        sig_pwr = np.sum(pwr[m_cycles-1:m_cycles+2])
+        total_pwr = np.sum(pwr[1:])
+        noise_pwr = total_pwr - sig_pwr
+        if noise_pwr > 0 and sig_pwr > 0:
+            sinad = 10 * np.log10(sig_pwr / noise_pwr)
+            enob = (sinad - 1.76) / 6.02
+        else:
+            enob = 0
+
+        all_dnl_max.append(dnl_max)
+        all_inl_max.append(inl_max)
+        all_enob.append(enob)
+        all_missing.append(missing)
+
+        if (run + 1) % 50 == 0:
+            print(f"  Run {run+1}/{n_runs}...")
+
+    all_dnl_max = np.array(all_dnl_max)
+    all_inl_max = np.array(all_inl_max)
+    all_enob = np.array(all_enob)
+    all_missing = np.array(all_missing)
+
+    print(f"\n  Monte Carlo Results ({n_runs} runs):")
+    print(f"  DNL max:  mean={np.mean(all_dnl_max):.3f}, "
+          f"std={np.std(all_dnl_max):.3f}, "
+          f"worst={np.max(all_dnl_max):.3f} LSB")
+    print(f"  INL max:  mean={np.mean(all_inl_max):.3f}, "
+          f"std={np.std(all_inl_max):.3f}, "
+          f"worst={np.max(all_inl_max):.3f} LSB")
+    print(f"  ENOB:     mean={np.mean(all_enob):.2f}, "
+          f"std={np.std(all_enob):.2f}, "
+          f"worst={np.min(all_enob):.2f} bits")
+    print(f"  Missing codes: {np.sum(all_missing > 0)} runs with missing codes")
+    print(f"  DNL < 1.0 LSB in {np.sum(all_dnl_max < 1.0)}/{n_runs} runs "
+          f"({100*np.sum(all_dnl_max < 1.0)/n_runs:.0f}%)")
+    print(f"  DNL < 1.5 LSB in {np.sum(all_dnl_max < 1.5)}/{n_runs} runs")
+
+    # Plot Monte Carlo results
+    if HAS_PLOT:
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+        axes[0].hist(all_dnl_max, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
+        axes[0].axvline(1.0, color='r', linestyle='--', label='Spec (1.0 LSB)')
+        axes[0].set_xlabel('Max |DNL| (LSB)')
+        axes[0].set_ylabel('Count')
+        axes[0].set_title(f'DNL Distribution (N={n_runs})')
+        axes[0].legend()
+
+        axes[1].hist(all_inl_max, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
+        axes[1].axvline(2.0, color='r', linestyle='--', label='Spec (2.0 LSB)')
+        axes[1].set_xlabel('Max |INL| (LSB)')
+        axes[1].set_title(f'INL Distribution (N={n_runs})')
+        axes[1].legend()
+
+        axes[2].hist(all_enob, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
+        axes[2].axvline(10.0, color='r', linestyle='--', label='Spec (10 bits)')
+        axes[2].set_xlabel('ENOB (bits)')
+        axes[2].set_title(f'ENOB Distribution (N={n_runs})')
+        axes[2].legend()
+
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOT_DIR, 'monte_carlo.png'), dpi=150)
+        plt.close()
+        print("  Saved: plots/monte_carlo.png")
+
+    return {
+        'dnl_mean': float(np.mean(all_dnl_max)),
+        'dnl_worst': float(np.max(all_dnl_max)),
+        'inl_mean': float(np.mean(all_inl_max)),
+        'inl_worst': float(np.max(all_inl_max)),
+        'enob_mean': float(np.mean(all_enob)),
+        'enob_worst': float(np.min(all_enob)),
+        'yield_dnl_pct': float(100 * np.sum(all_dnl_max < 1.0) / n_runs),
+    }
+
+
+# =============================================================================
+# TB7b: PVT Corner Analysis
+# =============================================================================
+def pvt_corners():
+    """Simulate comparator at PVT corners, measure offset and delay."""
+    print("\n=== TB7b: PVT Corner Analysis ===")
+
+    corners = ['tt', 'ss', 'ff', 'sf', 'fs']
+    temps = [-40, 27, 125]
+    results = []
+
+    for corner in corners:
+        for temp in temps:
+            netlist = f"""* PVT corner: {corner} @ {temp}C
+.lib "sky130.lib.spice" {corner}
+.temp {temp}
+
+VDD vdd 0 {VDD}
+VSS vss 0 0
+VINP vinp 0 0.901
+VINN vinn 0 0.9
+VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
+
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+X8     outn   outp   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
+
+CL1 outp 0 10f
+CL2 outn 0 10f
+
+.tran 0.1n 200n
+.control
+run
+wrdata pvt_out.txt v(outp) v(outn) v(clk)
+quit
+.endc
+.end
+"""
+            output = run_ngspice(netlist)
+            data = parse_wrdata('pvt_out.txt')
+
+            delay_ns = 5.0
+            decision = -1
+            if data is not None:
+                t = data[:, 0]
+                outp = data[:, 1]
+                outn = data[:, 2]
+                clk = data[:, 3]
+
+                # Decision at t=58ns
+                idx = np.argmin(np.abs(t - 58e-9))
+                decision = 1 if outp[idx] > outn[idx] else 0
+
+                # Delay
+                clk_rise = None
+                for i in range(1, len(clk)):
+                    if clk[i-1] < 0.9 and clk[i] >= 0.9:
+                        clk_rise = t[i]
+                        break
+                if clk_rise is not None:
+                    start_idx = np.argmin(np.abs(t - clk_rise))
+                    for i in range(start_idx + 1, len(t)):
+                        if outp[i] < 0.5 or outn[i] < 0.5:
+                            delay_ns = (t[i] - clk_rise) * 1e9
+                            break
+
+            results.append({
+                'corner': corner,
+                'temp': temp,
+                'delay_ns': delay_ns,
+                'decision': decision,
+            })
+            print(f"  {corner:>2s} {temp:>4d}C: delay={delay_ns:.2f} ns, "
+                  f"decision={'correct' if decision == 0 else 'WRONG' if decision == 1 else 'FAIL'}")
+
+    # Check worst case
+    delays = [r['delay_ns'] for r in results]
+    wrong = sum(1 for r in results if r['decision'] != 0)
+    print(f"\n  Worst-case delay: {max(delays):.2f} ns")
+    print(f"  Wrong decisions: {wrong}/{len(results)}")
+
+    # Plot PVT results
+    if HAS_PLOT:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        for corner in corners:
+            corner_data = [r for r in results if r['corner'] == corner]
+            t_vals = [r['temp'] for r in corner_data]
+            d_vals = [r['delay_ns'] for r in corner_data]
+            marker = 'x' if any(r['decision'] != 0 for r in corner_data) else 'o'
+            ax.plot(t_vals, d_vals, f'{marker}-', label=corner)
+        ax.set_xlabel('Temperature (C)')
+        ax.set_ylabel('Comparator Delay (ns)')
+        ax.set_title('PVT Corner: Comparator Delay')
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOT_DIR, 'pvt_linearity.png'), dpi=150)
+        plt.close()
+        print("  Saved: plots/pvt_linearity.png")
+
+    return results
+
+
+# =============================================================================
 # Scoring
 # =============================================================================
 def compute_score(results):
@@ -854,6 +1151,29 @@ def main():
         'score': float(score),
         'specs_met': f"{n_pass}/{n_total}",
     }
+
+    # Phase B: Monte Carlo and PVT (run if Phase A passes)
+    if score >= 1.0:
+        print("\n" + "=" * 60)
+        print("  PHASE B: Attacking the winner")
+        print("=" * 60)
+
+        # TB7a: Monte Carlo with cap mismatch
+        mc_results = monte_carlo_mismatch(comp_offset=comp_offset, n_runs=200)
+        measurements['mc_dnl_mean'] = mc_results['dnl_mean']
+        measurements['mc_dnl_worst'] = mc_results['dnl_worst']
+        measurements['mc_inl_mean'] = mc_results['inl_mean']
+        measurements['mc_inl_worst'] = mc_results['inl_worst']
+        measurements['mc_enob_mean'] = mc_results['enob_mean']
+        measurements['mc_enob_worst'] = mc_results['enob_worst']
+        measurements['mc_yield_dnl_pct'] = mc_results['yield_dnl_pct']
+
+        # TB7b: PVT corners
+        pvt_results = pvt_corners()
+        measurements['pvt_worst_delay_ns'] = max(r['delay_ns'] for r in pvt_results)
+        measurements['pvt_wrong_decisions'] = sum(1 for r in pvt_results
+                                                   if r['decision'] != 0)
+
     with open(os.path.join(BLOCK_DIR, 'measurements.json'), 'w') as f:
         json.dump(measurements, f, indent=2)
 

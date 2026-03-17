@@ -70,12 +70,13 @@ Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
-* Fold node loads — noiseless behavioral current sinks with CMFB
-* These replace NMOS loads: zero 1/f noise (models ideal current source)
-* CMFB adjusts current to set output CM = 0.9V
-* Nominal load = Itail/2 + Ifold = 1.5u + 2u = 3.5u
-Bload1 fd1 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
-Bload2 fd2 vss i='max(0.1u, {iload} + 50u*((v(outp)+v(outn))/2 - 0.9))'
+* NMOS loads at fold nodes — REAL transistors (large WL for low 1/f noise)
+* Gate controlled by CMFB to set output CM = 0.9V
+Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
+Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
+
+* Ideal CMFB: adjusts NMOS load gate to set output CM = 0.9V
+Ecmfb ncmfb vss vol='max(0.2, min(1.2, 0.45 + 50*((v(outp)+v(outn))/2 - 0.9)))'
 
 * Cascode bias
 Vncas ncas vss 0.7

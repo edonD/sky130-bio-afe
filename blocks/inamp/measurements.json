@@ -1,10 +1,10 @@
 {
   "measurements": {
-    "gain_db": 35.84169,
-    "bandwidth_hz": 2920942.0,
-    "cmrr_60hz_db": 257.20739000000003,
-    "input_referred_noise_uvrms": 0.5335131000000001,
-    "input_offset_uv": 2.3166380481079747e-08,
+    "gain_db": 35.78156,
+    "bandwidth_hz": 1063655.0,
+    "cmrr_60hz_db": 282.51246,
+    "input_referred_noise_uvrms": 0.9187487000000001,
+    "input_offset_uv": 9.935012977599956e-09,
     "power_uw": 10.80006
   },
   "score": 1.0,

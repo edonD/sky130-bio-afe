@@ -26,8 +26,8 @@ Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 .subckt miller_opamp inp inn out vdd vss nbias params: cc_val=50p
 XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
 XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
-XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
-XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
+XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=4u
+XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=4u
 XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
 XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=2.5u l=4u

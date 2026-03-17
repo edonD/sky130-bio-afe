@@ -7,7 +7,7 @@ set grid
 unset logscale x 
 set xrange [0.000000e+00:2.000000e-01]
 unset logscale y 
-set yrange [-4.467537e-12:3.309353e-12]
+set yrange [-5.767120e-12:5.589484e-12]
 #set xtics 1
 #set x2tics 1
 #set ytics 1

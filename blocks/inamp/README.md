@@ -14,7 +14,7 @@ Electrode- → [Cin 51pF] → gn → OTA(inv-) → outn → [Cfb 1pF] → gn (fe
 
 ### Key Design Features
 - **Fully differential** output with ideal CMFB for inherent high CMRR
-- **PMOS input pair** (4× 99µm/8µm parallel, WL=3168µm²) for low 1/f noise
+- **PMOS input pair** (6× 99µm/8µm parallel, WL=4752µm²) for low 1/f noise
 - **NMOS cascodes** (4× 49µm/10µm, WL=1960µm²) for high output impedance
 - **Large Cin** (51pF) to dilute input pair Cgs and reduce noise gain
 - **Capacitive input coupling** for DC electrode offset (±300mV) rejection
@@ -25,24 +25,24 @@ Electrode- → [Cin 51pF] → gn → OTA(inv-) → outn → [Cfb 1pF] → gn (fe
 | Parameter | Target | Measured (tt,27°C) | Status | Margin |
 |-----------|--------|---------------------|--------|--------|
 | Gain | >34 dB | 35.85 dB | PASS | +1.85 dB |
-| Input noise (0.5-150 Hz) | <1.5 µVrms | 1.32 µVrms | PASS | 12% margin |
+| Input noise (0.5-150 Hz) | <1.5 µVrms | 1.21 µVrms | PASS | 20% margin |
 | CMRR at 60 Hz | >100 dB | 267 dB | PASS | large (ideal matching) |
 | Input offset | <50 µV | ~0 µV | PASS | (ideal symmetry) |
-| Bandwidth | >10 kHz | 2.73 MHz | PASS | 273× |
+| Bandwidth | >10 kHz | 3.34 MHz | PASS | 334× |
 | Power | <15 µW | 10.8 µW | PASS | 28% margin |
 
 ## PVT Corner Summary (15/15 pass)
 
 | Corner | -40°C | 27°C | 125°C |
 |--------|-------|------|-------|
-| tt | 1.16 µV PASS | 1.32 µV PASS | 1.45 µV PASS |
-| ss | 1.19 µV PASS | 1.34 µV PASS | 1.44 µV PASS |
-| ff | 1.14 µV PASS | 1.30 µV PASS | 1.46 µV PASS |
-| sf | 1.19 µV PASS | 1.34 µV PASS | 1.42 µV PASS |
-| fs | 1.14 µV PASS | 1.30 µV PASS | 1.47 µV PASS |
+| tt | 1.07 µV PASS | 1.21 µV PASS | 1.29 µV PASS |
+| ss | 1.09 µV PASS | 1.22 µV PASS | 1.28 µV PASS |
+| ff | 1.05 µV PASS | 1.19 µV PASS | 1.31 µV PASS |
+| sf | 1.10 µV PASS | 1.21 µV PASS | 1.26 µV PASS |
+| fs | 1.05 µV PASS | 1.19 µV PASS | 1.31 µV PASS |
 
 Gain is 35.8 dB at all corners (Cin/Cfb = 62, process/temp independent).
-Worst-case noise: 1.47 µVrms at fs/125°C (2% margin).
+Worst-case noise: 1.31 µVrms at ff/fs 125°C (13% margin).
 
 ## Plots
 
@@ -82,7 +82,7 @@ Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output sta
 1. **CMRR is unrealistically high** (267 dB): ideal matching in sim. Real silicon ~80-100 dB from mismatch.
 2. **Offset is zero**: perfect symmetry in simulation. Real offset from mismatch.
 3. **Noiseless loads are idealized**: real current source loads would add noise.
-4. **Noise margin at hot corner is thin**: fs/125°C noise = 1.47 µVrms (2% margin).
+4. **Noise margin at hot corner**: ff/fs at 125°C = 1.31 µVrms (13% margin).
 5. **62pF input caps are large**: ~250µm × 250µm each in SKY130 MIM. Feasible but significant area.
 6. **ECG transient verified**: 1mV QRS + 2mV 60Hz + 300mV offset → output 0.897-0.903V, no saturation.
 
@@ -107,4 +107,5 @@ Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output sta
 | 8 | 1.00 | Cin=55pF — 13/15 PVT pass (ff/fs @125°C fail noise) |
 | 9 | 1.00 | Cin=60pF — 15/15 PVT pass! Gain=35.6dB, noise=1.36µV |
 | 10 | 1.00 | itail=5u, ifold=0.5u — improved noise margin (worst 1.48µV) |
-| 11 | 1.00 | Cin=62pF — worst corner 1.47µV, 2% margin. Final design. |
+| 11 | 1.00 | Cin=62pF — worst corner 1.47µV, 2% margin |
+| 12 | 1.00 | 6× parallel input pair — worst corner 1.31µV, 13% margin |

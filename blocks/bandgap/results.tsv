@@ -1,0 +1,10 @@
+step	commit	score	specs_met	description
+0	813666f	1.00	6/6	V1 baseline reproduced: VREF=1.241V TC=37.8ppm PSRR=73dB. 3 specs fail 25% margin.
+1	-	0.00	0/6	Cascode OTA: headroom failure, diff pair in triode. Abandoned.
+2	-	0.50	3/6	Two-stage OTA: polarity error then convergence issues. Abandoned.
+3	-	0.80	5/6	Resistive startup: VDD-to-VREF path killed PSRR (53dB). Removed.
+4	-	-	-	Parametric sweep: found wp_pass=20u dramatically improves PSRR.
+5	ba52aad	1.00	6/6	Optimized: wp=20u Ra=122u Rptat=12.5u. Min margin=35.2%. All 25%+ pass.
+6	-	-	17/26	Robustness test v1: OTA params 93% pass.
+7	d816c46	1.00	6/6	OTA improved: Ln=3u Lp=5u Rb=350u Rc=8k. Min margin=41.6%. PSRR=85.1dB.
+8	-	-	14/26	Robustness test v2: higher margins, more PSRR-sensitive.

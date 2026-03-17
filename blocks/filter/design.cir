@@ -47,11 +47,12 @@ Cc s1out out 50p
 **********************************************
 * PSEUDO-RESISTOR
 **********************************************
-* Anti-parallel PMOS pair, min width, long channel
-* Targeting ~3 GΩ for f_low ~ 1 Hz with C = 50 pF
+* Using ideal 10 GΩ resistor for now (pseudo-R caused DC convergence
+* failure — body diode/subthreshold issue with PMOS anti-parallel pair).
+* TODO: Replace with proper gate-biased PMOS pseudo-R.
+* f_low = 1/(2*pi*10G*50p) = 0.318 Hz
 .subckt pseudo_res a b vdd
-Xpr1 a b b vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
-Xpr2 b a a vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
+Rpr a b 10G
 .ends pseudo_res
 
 **********************************************

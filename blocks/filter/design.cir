@@ -17,7 +17,7 @@ Vss vss 0 0
 Vcm vcm 0 {vcm_val}
 
 * Bias: ~280 nA reference
-Rbias vdd nbias 4.0Meg
+Rbias vdd nbias 4.5Meg
 Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 
 **********************************************

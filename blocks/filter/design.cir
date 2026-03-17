@@ -37,6 +37,10 @@ Cc s1out out {cc_val}
 **********************************************
 * DC FEEDBACK RESISTOR
 **********************************************
+* Ideal pseudo-resistor: 100GΩ sets f_low = 0.032 Hz
+* Real implementation requires HVT PMOS (sky130_fd_pr__pfet_01v8_hvt)
+* with gate bias control. HVT at VCM=0.9V gives f_low≈0.06 Hz,
+* but AC convergence needs .options reltol/gmin tuning.
 .subckt pseudo_res a b vdd
 Rpr a b 100G
 .ends pseudo_res

@@ -1,0 +1,86 @@
+* SKY130 Bandgap Voltage Reference — Self-Biased Current Mirror Topology
+*
+* Architecture:
+*   - Two PMOS current mirror branches force equal currents
+*   - Branch 1: PMOS -> R1 -> Q1 (1x PNP, diode-connected) -> GND
+*   - Branch 2: PMOS -> R1 -> R2 -> Q2 (8x PNP, diode-connected) -> GND
+*   - Output branch: PMOS mirror copy -> R_out -> GND
+*   - V_REF = I_branch * R_out
+*   - Startup circuit to escape zero-current degenerate state
+*
+* PNP BJTs: substrate devices, collector = GND
+* Resistors: xhigh_po (2000 ohm/sq) for high R in small area
+
+* === Parameters (overridden by evaluate.py) ===
+.param p_wp = 2e-6
+.param p_lp = 2e-6
+.param p_mp = 4
+.param p_r1_l = 10e-6
+.param p_r2_l = 50e-6
+.param p_rout_l = 80e-6
+.param p_r_w = 0.69e-6
+.param p_nbjt = 8
+.param p_cap = 2e-12
+.param p_wn_start = 0.42e-6
+.param p_ln_start = 1e-6
+
+* === Power Supply ===
+VDD vdd 0 DC 1.8
+VSS vss 0 DC 0
+
+* === PMOS Current Mirror (3 matched outputs) ===
+* Branch 1 (CTAT): mirror gate
+XMP1 nb1 nb1 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+* Branch 2 (PTAT): mirror copy
+XMP2 nb2 nb1 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+* Output branch: mirror copy
+XMP3 vref nb1 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+
+* === Branch 1: R1 + Q1 (1x PNP) ===
+* R1 from nb1 to emitter of Q1
+XR1 nb1 e1 vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_r1_l} mult=1
+* Q1: 1x PNP, diode-connected (collector=gnd, base=gnd)
+XQ1 vss vss e1 vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m=1
+
+* === Branch 2: R1 + R2 + Q2 (Nx PNP) ===
+* R1' from nb2 to mid2 (matched to R1)
+XR1B nb2 mid2 vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_r1_l} mult=1
+* R2 from mid2 to emitter of Q2 (generates delta_VBE/R2 PTAT current)
+XR2 mid2 e2 vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_r2_l} mult=1
+* Q2: Nx PNP, diode-connected
+XQ2 vss vss e2 vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
+
+* === Output Branch: R_out ===
+* V_REF = I_branch * R_out
+XRout vref vref_low vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_rout_l} mult=1
+* Small pulldown to establish DC path
+Rlow vref_low vss 1
+
+* === Startup Circuit ===
+* NFET injects current into mirror when nb1 is low (circuit not yet started)
+* Once operating, nb1 drops below VDD, turning off startup path
+XMN_START nb1 vdd vss vss sky130_fd_pr__nfet_01v8 w={p_wn_start} l={p_ln_start} m=1
+* Capacitor on vref for startup filtering
+Cref vref vss {p_cap}
+
+* === Simulation Control (overridden by evaluate.py testbenches) ===
+.lib "sky130_models/sky130.lib.spice" tt
+.option reltol=0.003
+.option abstol=1e-12
+.option gmin=1e-12
+.option method=gear
+
+.control
+* DC operating point
+op
+print v(vref) v(nb1) v(nb2) v(e1) v(e2) v(mid2)
+print @VDD[i]
+
+* Temperature sweep
+dc temp -40 125 1
+wrdata temp_sweep v(vref)
+
+quit
+.endc
+
+.end

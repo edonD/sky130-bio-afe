@@ -23,8 +23,8 @@ XMn_diode nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
 
 * First stage: NMOS diff pair + PMOS active load
 XM5 tail nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=2
-XM1 d1 inp tail vss sky130_fd_pr__nfet_01v8 w=8u l=4u m=1
-XM2 d2 inn tail vss sky130_fd_pr__nfet_01v8 w=8u l=4u m=1
+XM1 d1 inp tail vss sky130_fd_pr__nfet_01v8 w=10u l=4u m=1
+XM2 d2 inn tail vss sky130_fd_pr__nfet_01v8 w=10u l=4u m=1
 XM3 d2 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 XM4 d1 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 

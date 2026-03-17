@@ -63,8 +63,8 @@ XMn_diode nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
 * Tail = 1.8uA (m=2 from 0.9uA ref), 0.9uA per side
 XM5 tail nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=2
 * Diff pair: W=8u L=4u (wide for high gm, long for good rds)
-XM1 d1 inp tail vss sky130_fd_pr__nfet_01v8 w=8u l=4u m=1
-XM2 d2 inn tail vss sky130_fd_pr__nfet_01v8 w=8u l=4u m=1
+XM1 d1 inp tail vss sky130_fd_pr__nfet_01v8 w=10u l=4u m=1
+XM2 d2 inn tail vss sky130_fd_pr__nfet_01v8 w=10u l=4u m=1
 
 * PMOS active load: L=8u for very high rds
 XM3 d2 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1

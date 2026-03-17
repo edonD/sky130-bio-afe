@@ -101,7 +101,7 @@ Xamp3 s2_buf s2_out s2_out vdd vss nbias miller_opamp cc_val=50p
 * NOTE: Cc=100p for this section for better phase margin with 360pF load
 R_s3a s2_out s3_mid 10Meg
 R_s3b s3_mid s3_buf 10Meg
-C_s3a s3_mid s3_out 380p
+C_s3a s3_mid s3_out 375p
 C_s3b s3_buf vcm 24p
 Xamp4 s3_buf s3_out s3_out vdd vss nbias miller_opamp cc_val=100p
 

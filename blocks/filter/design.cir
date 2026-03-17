@@ -81,7 +81,7 @@ Xamp1 vcm hpf_in hpf_out vdd vss nbias miller_opamp cc_val=50p
 R_s1a hpf_out s1_mid 10Meg
 R_s1b s1_mid s1_buf 10Meg
 C_s1a s1_mid s1_out 97p
-C_s1b s1_buf vcm 91p
+C_s1b s1_buf vcm 90p
 Xamp2 s1_buf s1_out s1_out vdd vss nbias miller_opamp cc_val=50p
 
 * --- Section 2 (Q=0.7071) ---

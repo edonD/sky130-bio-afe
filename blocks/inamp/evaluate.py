@@ -33,8 +33,8 @@ OTA = r"""
 .param lp_in  = 8u
 .param wn_cas = 49u
 .param ln_cas = 10u
-.param itail  = 4u
-.param ifold  = 1u
+.param itail  = 5u
+.param ifold  = 0.5u
 .param iload  = 3u
 
 * PMOS tail current source (ideal)

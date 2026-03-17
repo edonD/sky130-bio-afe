@@ -10,7 +10,7 @@
 | f_high (Hz) | 130–170 | 167.5 | 7% | **PASS** |
 | Passband ripple (dB) | < 1 | 0.78 | 22% | **PASS** |
 | Stopband atten @ 250 Hz (dB) | > 20 | 21.7 | 9% | **PASS** |
-| Output noise (µVrms) | < 100 | 72.1 | 28% | **PASS** |
+| Output noise (µVrms) | < 100 | 64.1 | 36% | **PASS** |
 | Power (µW) | < 10 | 7.30 | 27% | **PASS** |
 
 ## Architecture
@@ -24,7 +24,7 @@ Input → [C_in] → [HPF feedback amp] → [SK Section 1] → [SK Section 2] �
 
 - **HPF stage**: Capacitively-coupled amplifier (C_in=C_fb=50pF) with ideal 100GΩ feedback resistor and two-stage Miller opamp. f_low = 0.035 Hz.
 - **LPF stages**: Three cascaded Sallen-Key 2nd-order sections with R=10MΩ and pF-range capacitors. 6th-order Butterworth at fc=170 Hz.
-- **Opamp**: Two-stage Miller-compensated. NMOS diff pair (W=20µ, L=1µ), PMOS mirror (W=4µ, L=2µ), PMOS CS output (W=16µ, L=0.5µ), ~350 nA bias per stage.
+- **Opamp**: Two-stage Miller-compensated. NMOS diff pair (W=30µ, L=1µ), PMOS mirror (W=4µ, L=2µ), PMOS CS output (W=16µ, L=0.5µ), ~350 nA bias per stage.
 
 ## Key Plots
 
@@ -41,7 +41,7 @@ Clean bandpass: flat from ~0.1 Hz to ~150 Hz, steep 6th-order rolloff above 170 
 ### Noise Spectrum
 ![Noise Spectrum](plots/noise_spectrum.png)
 
-1/f noise dominates below ~10 Hz (from NMOS diff pair). Flat thermal noise floor ~5000 nV/√Hz from 10-100 Hz. Small noise peak near 170 Hz from Q=1.93 section. Total integrated: 72.1 µVrms in 0.5-150 Hz band.
+1/f noise dominates below ~10 Hz (from NMOS diff pair). Flat thermal noise floor ~5000 nV/√Hz from 10-100 Hz. Small noise peak near 170 Hz from Q=1.93 section. Total integrated: 64.1 µVrms in 0.5-150 Hz band.
 
 ## Design Rationale
 
@@ -97,10 +97,10 @@ Synthetic ECG (72 BPM, 1 mV R-peak) + 50 µV 60 Hz interference. P-QRS-T morphol
 | f_high (Hz) | 167.5 | 130–170 | 7% (2.5 Hz) | **Structural** |
 | Ripple (dB) | 0.78 | < 1 | 22% | Medium |
 | Atten 250 Hz (dB) | 21.7 | > 20 | 9% (1.7 dB) | **Structural** |
-| Noise (µVrms) | 72.1 | < 100 | 28% | Low |
+| Noise (µVrms) | 64.1 | < 100 | 36% | Low |
 | Power (µW) | 7.30 | < 10 | 27% | Low |
 
-f_high and stopband margins are structurally constrained by the 6th-order Butterworth at fc=170 Hz — the filter order forces a trade-off between these two specs. Lowering fc improves stopband but worsens ripple at 150 Hz; raising fc worsens stopband. The current design is at the mathematical optimum. Noise and power have comfortable margins (27-28%).
+f_high and stopband margins are structurally constrained by the 6th-order Butterworth at fc=170 Hz — the filter order forces a trade-off between these two specs. Lowering fc improves stopband but worsens ripple at 150 Hz; raising fc worsens stopband. The current design is at the mathematical optimum. Noise and power have comfortable margins (27-36%). An 8th-order upgrade was attempted but the Q=2.56 section exceeded the opamp's GBW capability, causing 1.49 dB ripple.
 
 ## Failed Ideas
 
@@ -131,4 +131,6 @@ f_high and stopband margins are structurally constrained by the 6th-order Butter
 | 7 | 1.00 | 6/6 | Wider diff pair W=12u, all specs pass |
 | 8 | 1.00 | 6/6 | Reduced M7 W=4u→3u: power 9.09→7.3 µW |
 | 9 | 1.00 | 6/6 | Wider diff pair W=20u: noise 86→72 µVrms |
-| 10 | 1.00 | 6/6 | **Fine-tune caps, optimized margins** |
+| 10 | 1.00 | 6/6 | Fine-tune caps, optimized margins |
+| 11 | 0.93 | 5/6 | DISCARDED: 8th-order Butterworth (Q=2.56 too high) |
+| 12 | 1.00 | 6/6 | **Wider diff pair W=30u: noise 64 µVrms** |

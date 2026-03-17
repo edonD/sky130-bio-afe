@@ -487,9 +487,7 @@ def comp_offset_at_vcm(v_in, v_dac):
 
 def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,
                 cap_weights=None, use_vcm_offset=False):
-    """Simulate one SAR conversion.
-    cap_weights: actual capacitor values (if None, ideal binary-weighted).
-    use_vcm_offset: if True, use VCM-dependent offset from SPICE characterization.
+    """Simulate one SAR conversion with optional mismatch, noise, VCM offset.
     Returns the digital output code (0 to 2^n - 1)."""
     if cap_weights is None:
         code = 0

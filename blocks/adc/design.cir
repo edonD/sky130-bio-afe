@@ -1,0 +1,84 @@
+* 20-bit Sigma-Delta ADC — OTA for Integrators
+* SKY130 130nm CMOS
+* Two-stage Miller-compensated OTA (single-ended)
+
+.lib sky130_models/sky130.lib.spice tt
+
+* === Design Parameters ===
+.param p_wn_in   = 4e-6
+.param p_ln_in   = 0.5e-6
+.param p_wp_load = 4e-6
+.param p_lp_load = 1e-6
+.param p_wn_tail = 4e-6
+.param p_ln_tail = 2e-6
+.param p_wp_2nd  = 10e-6
+.param p_lp_2nd  = 0.5e-6
+.param p_wn_2nd  = 4e-6
+.param p_ln_2nd  = 1e-6
+.param p_cc      = 1.5e-12
+.param p_ibias   = 5e-6
+.param p_cap_s   = 4e-12
+.param p_cap_i   = 4e-12
+
+* === Two-Stage Miller OTA ===
+* Ports: vip vin vout vdd vss vbn
+* vbn: gate voltage for NMOS current mirrors/sources
+.subckt ota vip vin vout vdd vss vbn
+
+* --- Stage 1: NMOS differential pair + PMOS active load ---
+* Tail current source
+XMtail ntail vbn vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
+
+* Differential pair (NMOS input for higher gm/Id)
+XM1 nd1 vip ntail vss sky130_fd_pr__nfet_01v8 w={p_wn_in} l={p_ln_in} m=2
+XM2 nd2 vin ntail vss sky130_fd_pr__nfet_01v8 w={p_wn_in} l={p_ln_in} m=2
+
+* Active load (PMOS current mirror)
+XM3 nd1 nd1 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_load} l={p_lp_load} m=1
+XM4 nd2 nd1 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_load} l={p_lp_load} m=1
+
+* --- Stage 2: Common-source amplifier ---
+* PMOS driver (driven by 1st stage output nd2)
+XM5 vout nd2 vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_2nd} l={p_lp_2nd} m=2
+
+* NMOS current source (biased by vbn)
+XM6 vout vbn vss vss sky130_fd_pr__nfet_01v8 w={p_wn_2nd} l={p_ln_2nd} m=1
+
+* Miller compensation capacitor
+Cc nd2 vout {p_cc}
+
+.ends ota
+
+* === Top-level test circuit ===
+VDD vdd 0 DC 1.8
+VSS vss 0 DC 0
+
+* Bias: diode-connected NMOS generates vbn from ibias
+XMbias vbn vbn vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
+Ibias vdd vbn DC {p_ibias}
+
+* OTA under test
+Xota1 vip vin vout vdd vss vbn ota
+
+* Input: common-mode at 0.9V, AC stimulus on positive input
+Vcm vip 0 DC 0.9 AC 1.0
+
+* DC feedback: moderate resistor for stable convergence
+* At DC, forces unity-gain follower → vout ≈ 0.9V
+* At AC: Rfb loads output, but we correct for it
+Rfb vout vin 10e6
+
+* Load capacitor (representative of sampling cap)
+Cload vout 0 {p_cap_s}
+
+* Help SPICE convergence to correct operating point
+.nodeset v(vout)=0.9 v(vin)=0.9
+
+.control
+* Placeholder — replaced by evaluate.py
+op
+print v(vout) v(vin) v(vip)
+quit
+.endc
+
+.end

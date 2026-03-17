@@ -1,0 +1,8 @@
+# Temporary SPICE files
+tb*.cir
+ota_ac.dat
+*.dat
+__pycache__/
+
+# Keep these
+!design.cir

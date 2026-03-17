@@ -85,6 +85,7 @@ Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output at 
 4. **Noise margin at hot corner**: fs at 125°C = 1.22 µVrms (19% margin).
 5. **62pF input caps are large**: ~250µm × 250µm each in SKY130 MIM. Feasible but significant area.
 6. **ECG transient verified**: 1mV QRS + 2mV 60Hz + 300mV offset → output 0.897-0.903V, no saturation.
+7. **Output impedance is ~1 MΩ** (interface spec says <1 kΩ). The folded-cascode OTA has high Zout. This is acceptable if the PGA has capacitive (high-Z) input. A source-follower buffer could be added if needed, at the cost of ~1-2 µW additional power.
 
 ## Failed Ideas
 1. **Simple 5T OTA** — insufficient open-loop gain for accurate Cin/Cfb

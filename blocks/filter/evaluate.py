@@ -611,6 +611,118 @@ def score_results(measurements):
     return final_score, specs_met, total_specs, results
 
 ###############################################################################
+# TB6: PVT CORNERS
+###############################################################################
+
+def tb6_pvt_corners():
+    """Run AC sweep across process corners and temperatures."""
+    print("\n" + "=" * 60)
+    print("TB6: PVT Corner Analysis")
+    print("=" * 60)
+
+    corners = ['tt', 'ss', 'ff', 'sf', 'fs']
+    temps = [-40, 27, 125]
+    results = []
+
+    with open('design.cir', 'r') as f:
+        base_netlist = f.read()
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    for corner in corners:
+        for temp in temps:
+            label = f"{corner}_{temp}C"
+            # Replace corner and add temp
+            netlist = base_netlist.replace(
+                '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt',
+                f'.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" {corner}'
+            )
+            netlist = strip_final_end(netlist)
+            netlist += f"""
+.temp {temp}
+.ac dec 100 0.01 100k
+.control
+run
+wrdata pvt_{label}.txt vdb(output)
+quit
+.endc
+.end
+"""
+            output, rc = run_ngspice(netlist, timeout=120)
+
+            fname = f'pvt_{label}.txt'
+            if not os.path.exists(fname):
+                print(f"  {label}: FAILED (no output)")
+                continue
+
+            arr = read_wrdata(fname)
+            if arr is None or len(arr) < 10:
+                print(f"  {label}: FAILED (bad data)")
+                continue
+
+            freq = np.abs(arr[:, 0])
+            mask = freq > 0
+            freq = freq[mask]
+            mag_db = arr[mask, 1]
+            uf, idx = np.unique(freq, return_index=True)
+            mag_db = mag_db[idx]
+            freq = uf
+
+            # Find f_high
+            pb_mask = (freq >= 0.5) & (freq <= 300)
+            if not np.any(pb_mask):
+                continue
+            peak = np.max(mag_db[pb_mask])
+            target_3db = peak - 3
+            f_high = 0
+            for i in range(len(freq) - 2, 0, -1):
+                if freq[i] > 1 and mag_db[i] >= target_3db and mag_db[i+1] < target_3db:
+                    f_high = freq[i] + (freq[i+1]-freq[i])*(target_3db-mag_db[i])/(mag_db[i+1]-mag_db[i])
+                    break
+
+            # Find attenuation at 250 Hz
+            idx_250 = np.argmin(np.abs(freq - 250))
+            atten_250 = peak - mag_db[idx_250]
+
+            results.append({
+                'corner': corner, 'temp': temp, 'label': label,
+                'f_high': f_high, 'peak_db': peak, 'atten_250': atten_250
+            })
+
+            print(f"  {label}: f_high={f_high:.1f} Hz, peak={peak:.2f} dB, atten@250={atten_250:.1f} dB")
+
+            # Plot
+            ax.semilogx(freq, mag_db, linewidth=0.8, label=label, alpha=0.7)
+
+    ax.set_xlabel('Frequency (Hz)')
+    ax.set_ylabel('Gain (dB)')
+    ax.set_title('PVT Corner Frequency Response')
+    ax.set_xlim([0.01, 100000])
+    ax.set_ylim([-60, 5])
+    ax.axhline(y=-3, color='r', linestyle='--', alpha=0.3)
+    ax.axvline(x=250, color='m', linestyle=':', alpha=0.3)
+    ax.legend(fontsize=6, ncol=3, loc='lower left')
+    ax.grid(True, which='both', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f'{PLOTS_DIR}/pvt_frequency_response.png', dpi=150)
+    plt.close()
+    print(f"  Plot saved: {PLOTS_DIR}/pvt_frequency_response.png")
+
+    # Summary
+    if results:
+        f_highs = [r['f_high'] for r in results if r['f_high'] > 0]
+        attens = [r['atten_250'] for r in results]
+        if f_highs:
+            print(f"\n  f_high range: {min(f_highs):.1f} — {max(f_highs):.1f} Hz")
+            print(f"  f_high nominal-to-worst ratio: {max(f_highs)/min(f_highs):.2f}x")
+        if attens:
+            print(f"  Atten@250Hz range: {min(attens):.1f} — {max(attens):.1f} dB")
+            worst_atten = min(attens)
+            print(f"  Worst-case atten@250Hz: {worst_atten:.1f} dB {'PASS' if worst_atten > 20 else 'FAIL'}")
+
+    return results
+
+###############################################################################
 # MAIN
 ###############################################################################
 
@@ -640,6 +752,9 @@ def main():
     noise = tb5_noise()
     if noise:
         measurements['output_noise_uvrms'] = noise['output_noise_uvrms']
+
+    # TB6: PVT Corners
+    pvt = tb6_pvt_corners()
 
     # Score
     print("\n" + "=" * 60)

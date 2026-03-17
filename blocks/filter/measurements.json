@@ -1,0 +1,44 @@
+{
+  "measurements": {
+    "f_low_hz": 0.03534854192804088,
+    "f_high_hz": 167.24619744366697,
+    "passband_ripple_db": 0.796376574,
+    "stopband_atten_250hz_db": 21.791397542,
+    "power_uw": 9.087545,
+    "output_noise_uvrms": 86.25141475488755
+  },
+  "score": 1.0,
+  "specs_met": "6/6",
+  "details": {
+    "f_low_hz": {
+      "value": 0.03534854192804088,
+      "target": "<1.0",
+      "pass": true
+    },
+    "f_high_hz": {
+      "value": 167.24619744366697,
+      "target": "130 to 170",
+      "pass": true
+    },
+    "passband_ripple_db": {
+      "value": 0.796376574,
+      "target": "<1",
+      "pass": true
+    },
+    "stopband_atten_250hz_db": {
+      "value": 21.791397542,
+      "target": ">20",
+      "pass": true
+    },
+    "output_noise_uvrms": {
+      "value": 86.25141475488755,
+      "target": "<100",
+      "pass": true
+    },
+    "power_uw": {
+      "value": 9.087545,
+      "target": "<10",
+      "pass": true
+    }
+  }
+}

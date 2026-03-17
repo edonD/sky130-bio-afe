@@ -152,8 +152,9 @@ def tb2_temperature_sweep(params):
     print("\n=== TB2: Temperature Sweep ===")
 
     wrfile = abs_path("temp_sweep")
+    # Sweep from warm to cold for better convergence at cold temps
     ctrl = f""".control
-dc temp -40 125 1
+dc temp 125 -40 -1
 wrdata {wrfile} v(vref)
 quit
 .endc"""

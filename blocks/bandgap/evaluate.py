@@ -237,8 +237,10 @@ def tb3_supply_sweep(params):
     print("\n=== TB3: Supply Sweep (Line Regulation / PSRR) ===")
 
     wrfile = abs_path("supply_sweep")
+    # Sweep from 1.98V down to 1.62V for better convergence
+    # (starting from higher VDD where circuit has more headroom)
     ctrl = f""".control
-dc VDD 1.62 1.98 0.01
+dc VDD 1.98 1.62 -0.01
 wrdata {wrfile} v(vref)
 quit
 .endc"""

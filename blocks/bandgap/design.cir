@@ -90,13 +90,8 @@ XQ2 vss vss eb vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
 Cvref vref vss {p_cap}
 * Weak startup: ensures V_REF > 0 at power-up so op-amp can function
 * Also helps convergence during DC sweeps
-* Startup: PMOS injects current when V_REF is low (gate=node_a=Vbe≈0.7V)
-* When V_REF < 1.2V: PMOS has VGS = 0.7 - VDD = -1.1V, strongly on
-* When V_REF ≈ 1.2V: op-amp regulates, PMOS contributes small extra current
-* Use long L for weak device that doesn't disturb regulation
-XMP_start vref node_a vdd vdd sky130_fd_pr__pfet_01v8 w=0.42e-6 l=8e-6 m=1
-* Weak pull-down to prevent V_REF from reaching VDD if op-amp is off
-Rstart vref vss 5e6
+* No startup circuit — rely on .nodeset for DC convergence
+* The op-amp loop will maintain the bandgap state once converged
 
 * === Op-Amp (NFET diff pair, PMOS load) ===
 * + = node_a (Vbe1 ≈ 0.69V), - = node_b (I*Rptat + Vbe2 ≈ 0.69V)

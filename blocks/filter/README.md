@@ -6,11 +6,11 @@
 
 | Parameter | Target | Measured | Margin | Status |
 |-----------|--------|----------|--------|--------|
-| f_low (Hz) | < 1.0 | 0.036 | 96% | **PASS** |
-| f_high (Hz) | 130–170 | 167.5 | 7% | **PASS** |
-| Passband ripple (dB) | < 1 | 0.78 | 22% | **PASS** |
-| Stopband atten @ 250 Hz (dB) | > 20 | 21.7 | 9% | **PASS** |
-| Output noise (µVrms) | < 100 | 64.1 | 36% | **PASS** |
+| f_low (Hz) | < 1.0 | 0.040 | 96% | **PASS** |
+| f_high (Hz) | 130–170 | 164.8 | 13% | **PASS** |
+| Passband ripple (dB) | < 1 | 0.89 | 11% | **PASS** |
+| Stopband atten @ 250 Hz (dB) | > 20 | 22.7 | 14% | **PASS** |
+| Output noise (µVrms) | < 100 | 66.3 | 34% | **PASS** |
 | Power (µW) | < 10 | 7.30 | 27% | **PASS** |
 
 ## Architecture
@@ -97,10 +97,10 @@ Synthetic ECG (72 BPM, 1 mV R-peak) + 50 µV 60 Hz interference. P-QRS-T morphol
 | f_high (Hz) | 167.5 | 130–170 | 7% (2.5 Hz) | **Structural** |
 | Ripple (dB) | 0.78 | < 1 | 22% | Medium |
 | Atten 250 Hz (dB) | 21.7 | > 20 | 9% (1.7 dB) | **Structural** |
-| Noise (µVrms) | 64.1 | < 100 | 36% | Low |
+| Noise (µVrms) | 66.3 | < 100 | 34% | Low |
 | Power (µW) | 7.30 | < 10 | 27% | Low |
 
-f_high and stopband margins are structurally constrained by the 6th-order Butterworth at fc=170 Hz — the filter order forces a trade-off between these two specs. Lowering fc improves stopband but worsens ripple at 150 Hz; raising fc worsens stopband. The current design is at the mathematical optimum. Noise and power have comfortable margins (27-36%). An 8th-order upgrade was attempted but the Q=2.56 section exceeded the opamp's GBW capability, causing 1.49 dB ripple.
+The design uses a detuned Section 3 (C1=380pF vs ideal 360pF) that deliberately shifts the high-Q section lower. This trades ripple margin for stopband/f_high margin, achieving the best-balanced configuration where **all critical specs have ≥11% margin**. An 8th-order upgrade was attempted but Q=2.56 exceeded the opamp's GBW capability (1.49 dB ripple). A Chebyshev Type I was also investigated but Q=6.51 is completely impractical.
 
 ## Failed Ideas
 
@@ -133,4 +133,7 @@ f_high and stopband margins are structurally constrained by the 6th-order Butter
 | 9 | 1.00 | 6/6 | Wider diff pair W=20u: noise 86→72 µVrms |
 | 10 | 1.00 | 6/6 | Fine-tune caps, optimized margins |
 | 11 | 0.93 | 5/6 | DISCARDED: 8th-order Butterworth (Q=2.56 too high) |
-| 12 | 1.00 | 6/6 | **Wider diff pair W=30u: noise 64 µVrms** |
+| 12 | 1.00 | 6/6 | Wider diff pair W=30u: noise 64 µVrms |
+| 13 | 1.00 | 6/6 | Section 3 detuning C1=370pF: stopband 22.2 dB |
+| 14 | 0.93 | 5/6 | DISCARDED: C1=385pF, ripple 0.96 dB too close |
+| 15 | 1.00 | 6/6 | **C1=380pF: best balanced margins (min 11%)** |

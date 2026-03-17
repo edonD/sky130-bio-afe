@@ -12,7 +12,7 @@
   - Section 2: Q = 0.60, fc = 180 Hz
   - Section 3: Q = 0.90, fc = 180 Hz
   - Section 4: Q = 2.10 (designed), fc = 179 Hz. Compensates opamp Q enhancement to achieve Q_actual ≈ 2.56 (Butterworth target).
-- **Opamp**: Two-stage Miller-compensated CMOS OTA. NMOS diff pair (W=30u, L=2u), PMOS load/mirror (W=4u, L=2u), PMOS CS output stage. ~250 nA bias per opamp. GBW ≈ 7 kHz.
+- **Opamp**: Two-stage Miller-compensated CMOS OTA. NMOS diff pair (W=30u, L=4u), PMOS load/mirror (W=4u, L=2u), PMOS CS output stage. ~250 nA bias per opamp. GBW ≈ 6 kHz.
 - **Total**: 5 opamps, supply 1.8 V, power 6.00 µW.
 
 ## Specification Table
@@ -21,9 +21,9 @@
 |-----------|--------|----------|--------|--------|
 | f_low (Hz) | < 1.0 | 0.036 | 96% | PASS |
 | f_high (Hz) | 130–170 | 167.9 | in range | PASS |
-| Passband ripple (dB) | < 1.0 | 0.65 | 35% | PASS |
-| Stopband atten @ 250 Hz (dB) | > 20 | 26.3 | 31% | PASS |
-| Output noise (µVrms) | < 100 | 65.5 | 34% | PASS |
+| Passband ripple (dB) | < 1.0 | 0.68 | 32% | PASS |
+| Stopband atten @ 250 Hz (dB) | > 20 | 26.4 | 32% | PASS |
+| Output noise (µVrms) | < 100 | 61.5 | 38% | PASS |
 | Power (µW) | < 10 | 6.00 | 40% | PASS |
 
 All six specs pass with >25% margin at nominal conditions.
@@ -50,7 +50,7 @@ Synthetic ECG (1 mV R-peak, 72 BPM) with 50 µV 60 Hz interference. 4 R-peaks de
 ### Noise Spectrum (TB5)
 ![Noise Spectrum](plots/noise_spectrum.png)
 
-Output-referred noise integrated over 0.5–150 Hz: 64.8 µVrms. Dominated by 1/f noise from the opamp diff pair below ~10 Hz and thermal noise above. Wide diff pair (W=30µ, L=2µ) minimizes 1/f corner.
+Output-referred noise integrated over 0.5–150 Hz: 61.5 µVrms. Dominated by 1/f noise from the opamp diff pair below ~10 Hz and thermal noise above. Large diff pair (W=30µ, L=4µ, area=120µm²) minimizes 1/f corner.
 
 ### PVT Corner Analysis (TB6)
 ![PVT Frequency Response](plots/pvt_frequency_response.png)
@@ -95,7 +95,7 @@ Our filter's key metrics vs. the filtering stage of commercial bio-AFEs:
 | Stopband atten | 26 dB @ 250 Hz | >80 dB (digital) | ~20 dB (3rd order) | >60 dB (digital) | >80 dB (digital) |
 | Passband ripple | 0.65 dB | ~0 (digital) | Component-dependent | ~0 (digital) | ~0 (digital) |
 | Filter power | 6.00 µW | Included in 900 µW/ch | ~45 µW (est.) | Included in 85 µW | Included in 335 µW/ch |
-| Filter noise | 64.8 µVrms | N/A (digital) | ~10 µVrms | N/A (digital) | N/A (digital) |
+| Filter noise | 61.5 µVrms | N/A (digital) | ~10 µVrms | N/A (digital) | N/A (digital) |
 
 **Where we beat competitors**:
 1. **Power**: 6.00 µW is far lower than AD8233's analog filter (~45 µW) and competitive with the filter portion of digital solutions
@@ -162,7 +162,8 @@ The sigma-delta ADC in the v2 signal chain provides its own digital decimation f
 | 11–13 | 0.93 | Tried 8th-order, Chebyshev — rejected |
 | 14–16 | 1.00 | Fine-tuned 6th-order, best margins 9–12% |
 | 17–20 | 0.85–1.00 | 8th-order with Q compensation, fc sweep |
-| 21 (final) | 1.00 | Optimized 8th-order, all margins >25% |
+| 21 | 1.00 | Optimized 8th-order, all margins >25% |
+| 22 (final) | 1.00 | Diff pair L=4u: noise 65.5→61.5 µVrms. Power 6.0 µW. All margins >25%. |
 
 ## Limitations
 

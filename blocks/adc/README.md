@@ -2,17 +2,17 @@
 
 ## Status: SCORE 1.0 — All Specs Pass
 
-3rd-order CIFB sigma-delta modulator with 1-bit quantizer, OSR=512, sinc3 decimation. Behavioral modulator validated with transistor-level OTA power verification in SKY130.
+3rd-order CIFB sigma-delta modulator with 1-bit quantizer, OSR=1024, sinc3 decimation. Behavioral modulator validated with transistor-level OTA power verification in SKY130.
 
 ## Spec Table
 
 | Parameter | Target | Measured | Margin | Status |
 |-----------|--------|----------|--------|--------|
-| ENOB | > 18 bits | 20.0 bits | 11.0% | PASS |
-| SNR | > 110 dB | 122.1 dB | 11.0% | PASS |
-| THD | < -100 dB | -141.1 dB | 41.1% | PASS |
+| ENOB | > 18 bits | **20.5 bits** | 13.8% | PASS |
+| SNR | > 110 dB | **125.1 dB** | 13.7% | PASS |
+| THD | < -100 dB | **-143.7 dB** | 43.7% | PASS |
 | Output Rate | > 4000 SPS | 5000 SPS | 25.0% | PASS |
-| Power | < 100 µW | 70.6 µW | 29.4% | PASS |
+| Power | < 100 µW | **70.6 µW** | 29.4% | PASS |
 | Input Range | > 1.2 V | 1.6 V | 33.3% | PASS |
 
 ## Architecture
@@ -29,7 +29,7 @@ Modulator bitstream (1-bit, 2.56 MHz) → [Sinc³ Decimation] → 20-bit @ 5000 
 ### Key Design Choices
 - **3rd-order CIFB** (Cascade of Integrators, Feedback): All integrators receive DAC feedback, ensuring unconditional stability
 - **1-bit quantizer**: Inherently linear DAC (no element matching needed)
-- **OSR = 512**: Clock = 2.56 MHz (trivial for 130nm)
+- **OSR = 1024**: Clock = 5.12 MHz (easy for 130nm)
 - **CIFB coefficients**: a1=b1=0.08, a2=0.4, a3=0.9 — keeps integrator states bounded
 - **Sinc³ decimation**: FIR-based (FFT convolution) for numerical stability
 
@@ -42,7 +42,7 @@ Modulator bitstream (1-bit, 2.56 MHz) → [Sinc³ Decimation] → 20-bit @ 5000 
 | Active load | PMOS mirror, W=8µm, L=4µm |
 | 2nd stage | PMOS W=20µm×2, L=0.5µm |
 | Current source | NMOS W=4µm, L=4µm |
-| Miller cap | 2 pF |
+| Miller cap | 1 pF |
 | Tail current | 3 µA |
 | DC gain | 59 dB (analytical) |
 | GBW | ~13 MHz (estimated from gm/Cc) |
@@ -95,8 +95,8 @@ ENOB ≥ 18.8 at all 15 corners (5 process × 3 temperature).
 
 | Metric | This Work | ADS1299 | MAX30003 | ADS1292R | AD8233 |
 |--------|-----------|---------|----------|----------|--------|
-| ENOB | **20.0 bits** | 24 bits | 18 bits | 24 bits | N/A |
-| SNR | **122 dB** | ~130 dB | ~95 dB | ~110 dB | N/A |
+| ENOB | **20.5 bits** | 24 bits | 18 bits | 24 bits | N/A |
+| SNR | **125 dB** | ~130 dB | ~95 dB | ~110 dB | N/A |
 | Power/ch | **70.6 µW** | 900 µW | 85 µW | 335 µW | 170 µW |
 | Output Rate | 5 kSPS | 0.25-16 kSPS | 0.5-512 SPS | 0.125-8 kSPS | Analog |
 | Supply | 1.8V | 5V | 1.8V | 3.3V | 3.3V |
@@ -114,7 +114,7 @@ ENOB ≥ 18.8 at all 15 corners (5 process × 3 temperature).
 - **MAX30003**: Slightly lower power (85 µW) with lower resolution
 
 ### Walden Figure of Merit
-FOM = Power / (2^ENOB × 2×BW) = 70.6e-6 / (2^20 × 5000) = 13.5 fJ/conv-step
+FOM = Power / (2^ENOB × 2×BW) = 70.6e-6 / (2^20.5 × 5000) = 9.5 fJ/conv-step
 This is competitive with state-of-the-art sigma-delta ADCs (Murmann survey: best FOM ~1 fJ/conv-step for 10-16 ENOB; for >18 ENOB, typical FOM = 10-100 fJ).
 
 ## Robustness Analysis
@@ -164,7 +164,8 @@ Current design achieves ENOB=20.0 at 71 µW — a Walden FOM of 13.5 fJ/conv-ste
 | 3 | Fix kT/C noise scaling by b1 | 18.5 | 113 | 71 | 1.00 | Noise was 12.5× too high |
 | 4 | Cs=20pF, 131k FFT points | 18.9 | 116 | 71 | 1.00 | Thermal noise limited |
 | 5 | Cs=50pF | 19.5 | 119 | 71 | 1.00 | Better thermal noise |
-| 6 | **Cs=100pF (final)** | **20.0** | **122** | **71** | **1.00** | **Best within power budget** |
+| 6 | Cs=100pF | 20.0 | 122 | 71 | 1.00 | Best at OSR=512 |
+| 7 | **OSR=1024, Cc=1pF (final)** | **20.5** | **125** | **71** | **1.00** | **Higher OSR, same power** |
 
 ## Known Limitations
 

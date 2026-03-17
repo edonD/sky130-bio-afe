@@ -16,9 +16,9 @@ outp                                       0.9
 outn                                       0.9
 gfb_p_int1                                   0
 gfb_n_int1                                   0
-xota.tail                               1.8465
-xota.fd1                              0.190199
-xota.fd2                              0.190199
+xota.tail                               1.8548
+xota.fd1                                0.1902
+xota.fd2                                0.1902
 xota.ncas                                  0.7
 bgfb_n#branch                                0
 bgfb_p#branch                                0
@@ -28,11 +28,11 @@ v.xota.vncas#branch                          0
 vcm#branch                                   0
 vin#branch                                   0
 vip#branch                                   0
-vdd#branch                        -6.00003e-06
+vdd#branch                        -7.00003e-06
 
  Reference value :  0.00000e+00
 No. of Data Rows : 408
-final_vdiff = -4.41247e-12
+final_vdiff = -3.12639e-13
 final_outp = 9.000003e-01
 final_outn = 9.000003e-01
 final_cm = 9.000003e-01
@@ -43,7 +43,7 @@ Warning: m=xx on .subckt line will override multiplier m hierarchy!
 Using SPARSE 1.3 as Direct Linear Solver
 sh: 1: gnuplot: not found
 
-  Vdiff_out=-0.000 mV  Gain=0.0 V/V = -167.1 dB
+  Vdiff_out=-0.000 mV  Gain=0.0 V/V = -190.1 dB
   Voutp=0.9000  Voutn=0.9000  CM=0.9000
 
 >>> TB2: AC Frequency Response
@@ -57,16 +57,16 @@ Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
 
  Reference value :  1.00000e-02
 No. of Data Rows : 501
-gain_1hz            =  3.572649e+01
-gain_60hz           =  3.583477e+01
-gain_150hz          =  3.583476e+01
-peak_gain           =  3.583478e+01 at=  8.317638e+01
-bw_3db              =  6.766832e+06
-gain_1hz = 3.572649e+01
-gain_60hz = 3.583477e+01
-gain_150hz = 3.583476e+01
-peak_gain = 3.583478e+01
-bw_3db = 6.766832e+06
+gain_1hz            =  3.572670e+01
+gain_60hz           =  3.583499e+01
+gain_150hz          =  3.583499e+01
+peak_gain           =  3.583500e+01 at=  9.120108e+01
+bw_3db              =  9.917260e+06
+gain_1hz = 3.572670e+01
+gain_60hz = 3.583499e+01
+gain_150hz = 3.583499e+01
+peak_gain = 3.583500e+01
+bw_3db = 9.917260e+06
 ngspice-42 done
 
 Warning: m=xx on .subckt line will override multiplier m hierarchy!
@@ -77,8 +77,8 @@ sh: 1: gnuplot: not found
   gain_1hz = 35.73
   gain_60hz = 35.83
   gain_150hz = 35.83
-  peak_gain = 35.83
-  bw_3db = 6.767e+06
+  peak_gain = 35.84
+  bw_3db = 9.917e+06
 
 >>> TB3: CMRR
 
@@ -91,8 +91,8 @@ Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
 
  Reference value :  1.00000e+00
 No. of Data Rows : 201
-cm_gain_60          =  -2.275344e+02
-cm_gain_60 = -2.27534e+02
+cm_gain_60          =  -2.215781e+02
+cm_gain_60 = -2.21578e+02
 ngspice-42 done
 
 Warning: m=xx on .subckt line will override multiplier m hierarchy!
@@ -100,8 +100,8 @@ Warning: m=xx on .subckt line will override multiplier m hierarchy!
 Using SPARSE 1.3 as Direct Linear Solver
 sh: 1: gnuplot: not found
 
-  CM→Diff gain at 60 Hz = -227.5 dB
-  CMRR = 35.8 - (-227.5) = 263.4 dB
+  CM→Diff gain at 60 Hz = -221.6 dB
+  CMRR = 35.8 - (-221.6) = 257.4 dB
 
 >>> TB4: Input-Referred Noise (0.5–150 Hz)
 ctance reset to 1.0e3 mho.
@@ -134,8 +134,8 @@ Warning: Drain conductance reset to 1.0e3 mho.
 No. of Data Rows : 248
 
 No. of Data Rows : 1
-onoise_total = 7.017141e-05
-inoise_total = 1.137860e-06
+onoise_total = 6.928633e-05
+inoise_total = 1.123518e-06
 ngspice-42 done
 
 Warning: m=xx on .subckt line will override multiplier m hierarchy!
@@ -143,18 +143,18 @@ Warning: m=xx on .subckt line will override multiplier m hierarchy!
 Using SPARSE 1.3 as Direct Linear Solver
 sh: 1: gnuplot: not found
 
-  Input-referred noise (0.5-150 Hz) = 1.138 µVrms
-  Output noise (0.5-150 Hz) = 70.171 µVrms
-  Input-referred noise = 1.138 µVrms
+  Input-referred noise (0.5-150 Hz) = 1.124 µVrms
+  Output noise (0.5-150 Hz) = 69.286 µVrms
+  Input-referred noise = 1.124 µVrms
 
 >>> TB5: Input Offset
              0.9
 outn                                       0.9
 gfb_p_int1                                   0
 gfb_n_int1                                   0
-xota.tail                               1.8465
-xota.fd1                              0.190199
-xota.fd2                              0.190199
+xota.tail                               1.8548
+xota.fd1                                0.1902
+xota.fd2                                0.1902
 xota.ncas                                  0.7
 bgfb_n#branch                                0
 bgfb_p#branch                                0
@@ -164,11 +164,11 @@ v.xota.vncas#branch                          0
 vcm#branch                                   0
 vin#branch                                   0
 vip#branch                                   0
-vdd#branch                        -6.00003e-06
+vdd#branch                        -7.00003e-06
 
  Reference value :  0.00000e+00
 No. of Data Rows : 408
-vfinal = 1.357137e-12
+vfinal = 1.527667e-12
 ngspice-42 done
 
 Warning: m=xx on .subckt line will override multiplier m hierarchy!
@@ -180,20 +180,21 @@ sh: 1: gnuplot: not found
   Input offset = 0.0 µV
 
 >>> TB6: Electrode Offset Tolerance
-  Off +300mV: Vdiff=-0.00mV gain=-163.7dB sat=no
+  Off +300mV: Vdiff=-0.00mV gain=-164.0dB sat=no
     Voutp=0.9000 Voutn=0.9000
-  Off -300mV: Vdiff=-0.00mV gain=-180.3dB sat=no
+  Off -300mV: Vdiff=0.00mV gain=-187.6dB sat=no
     Voutp=0.9000 Voutn=0.9000
 
 >>> TB7: Realistic ECG Transient
-                                0
+                 0
+gpb_n_int1                                   0
 outp                                       0.9
 outn                                       0.9
 gfb_p_int1                                   0
 gfb_n_int1                                   0
-xota.tail                               1.8465
-xota.fd1                              0.190199
-xota.fd2                              0.190199
+xota.tail                               1.8548
+xota.fd1                                0.1902
+xota.fd2                                0.1902
 xota.ncas                                  0.7
 bgfb_n#branch                                0
 bgfb_p#branch                                0
@@ -207,16 +208,15 @@ v.xota.vncas#branch                          0
 vcm#branch                                   0
 vecg#branch                                  0
 vcm_sig#branch                               0
-vdd#branch                        -6.00003e-06
+vdd#branch                        -7.00003e-06
 
  Reference value :  0.00000e+00
- Reference value :  2.85750e-01
- Reference value :  5.69350e-01
- Reference value :  8.54150e-01
- Reference value :  1.13855e+00
- Reference value :  1.42345e+00
- Reference value :  1.70715e+00
- Reference value :  1.98885e+00
+ Reference value :  2.85150e-01
+ Reference value :  5.75550e-01
+ Reference value :  8.58650e-01
+ Reference value :  1.14895e+00
+ Reference value :  1.43945e+00
+ Reference value :  1.72635e+00
 No. of Data Rows : 20041
 maxout = 9.028965e-01
 minout = 8.971040e-01
@@ -242,25 +242,25 @@ Doing analysis at TEMP = 27.000000 and TNOM = 27.000000
 
  Reference value :  0.00000e+00
 No. of Data Rows : 1
-idd = 6.000030e-06
-pwr = 1.080005e+01
+idd = 7.000031e-06
+pwr = 1.260006e+01
 ngspice-42 done
 
 Warning: m=xx on .subckt line will override multiplier m hierarchy!
 
 Using SPARSE 1.3 as Direct Linear Solver
 
-  Isupply=6.00 µA  Power=10.80 µW
+  Isupply=7.00 µA  Power=12.60 µW
 
 ============================================================
 SCORING
 ============================================================
-  gain_db                             tgt=     >34  val=       35.83  [PASS] w=15
-  input_referred_noise_uvrms          tgt=    <1.5  val=       1.138  [PASS] w=25
-  cmrr_60hz_db                        tgt=    >100  val=       263.4  [PASS] w=20
-  input_offset_uv                     tgt=     <50  val=   2.192e-08  [PASS] w=15
-  bandwidth_hz                        tgt=  >10000  val=   6.767e+06  [PASS] w=10
-  power_uw                            tgt=     <15  val=        10.8  [PASS] w=15
+  gain_db                             tgt=     >34  val=       35.84  [PASS] w=15
+  input_referred_noise_uvrms          tgt=    <1.5  val=       1.124  [PASS] w=25
+  cmrr_60hz_db                        tgt=    >100  val=       257.4  [PASS] w=20
+  input_offset_uv                     tgt=     <50  val=   2.468e-08  [PASS] w=15
+  bandwidth_hz                        tgt=  >10000  val=   9.917e+06  [PASS] w=10
+  power_uw                            tgt=     <15  val=        12.6  [PASS] w=15
 
   Score: 1.0000  (6/6 pass)
 
@@ -270,20 +270,20 @@ specs_met = 6/6
 ============================================================
 TB8: PVT CORNER ANALYSIS
 ============================================================
-  tt   -40°C: gain=  35.8dB  noise=  1.02µV  BW=     N/A  [PASS]
-  tt   +27°C: gain=  35.8dB  noise=  1.14µV  BW=   6.77M  [PASS]
-  tt  +125°C: gain=  35.8dB  noise=  1.20µV  BW=   3.68M  [PASS]
-  ss   -40°C: gain=  35.8dB  noise=  1.04µV  BW=     N/A  [PASS]
-  ss   +27°C: gain=  35.8dB  noise=  1.15µV  BW=   6.24M  [PASS]
-  ss  +125°C: gain=  35.8dB  noise=  1.18µV  BW=   3.73M  [PASS]
-  ff   -40°C: gain=  35.8dB  noise=  1.00µV  BW=     N/A  [PASS]
-  ff   +27°C: gain=  35.8dB  noise=  1.12µV  BW=   7.39M  [PASS]
-  ff  +125°C: gain=  35.8dB  noise=  1.21µV  BW=   3.60M  [PASS]
-  sf   -40°C: gain=  35.8dB  noise=  1.05µV  BW=     N/A  [PASS]
-  sf   +27°C: gain=  35.8dB  noise=  1.14µV  BW=   6.60M  [PASS]
-  sf  +125°C: gain=  35.8dB  noise=  1.16µV  BW=   3.96M  [PASS]
-  fs   -40°C: gain=  35.8dB  noise=  1.00µV  BW=     N/A  [PASS]
-  fs   +27°C: gain=  35.8dB  noise=  1.13µV  BW=   6.90M  [PASS]
-  fs  +125°C: gain=  35.8dB  noise=  1.22µV  BW=   3.48M  [PASS]
+  tt   -40°C: gain=  35.8dB  noise=  1.00µV  BW=     N/A  [PASS]
+  tt   +27°C: gain=  35.8dB  noise=  1.12µV  BW=   9.92M  [PASS]
+  tt  +125°C: gain=  35.8dB  noise=  1.19µV  BW=   4.36M  [PASS]
+  ss   -40°C: gain=  35.8dB  noise=  1.03µV  BW=     N/A  [PASS]
+  ss   +27°C: gain=  35.8dB  noise=  1.14µV  BW=   8.44M  [PASS]
+  ss  +125°C: gain=  35.8dB  noise=  1.18µV  BW=   4.39M  [PASS]
+  ff   -40°C: gain=  35.8dB  noise=  0.98µV  BW=     N/A  [PASS]
+  ff   +27°C: gain=  35.8dB  noise=  1.11µV  BW=  12.38M  [PASS]
+  ff  +125°C: gain=  35.8dB  noise=  1.21µV  BW=   4.30M  [PASS]
+  sf   -40°C: gain=  35.8dB  noise=  1.03µV  BW=     N/A  [PASS]
+  sf   +27°C: gain=  35.8dB  noise=  1.13µV  BW=   9.24M  [PASS]
+  sf  +125°C: gain=  35.8dB  noise=  1.16µV  BW=   4.70M  [PASS]
+  fs   -40°C: gain=  35.8dB  noise=  0.99µV  BW=     N/A  [PASS]
+  fs   +27°C: gain=  35.8dB  noise=  1.11µV  BW=  10.51M  [PASS]
+  fs  +125°C: gain=  35.8dB  noise=  1.21µV  BW=   4.12M  [PASS]
 
   PVT: 15/15 corners pass

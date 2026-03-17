@@ -3,22 +3,22 @@
 ============================================================
 === TB0: Comparator Characterization ===
   Comparator offset: 0.125 mV
-  Comparator delay:  0.45 ns
+  Comparator delay:  0.30 ns
   Decisions (sweep): [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
 === TB3: Conversion Timing ===
-  Comparator delay: 0.55 ns
-  Estimated conversion time: 0.031 us
+  Comparator delay: 0.40 ns
+  Estimated conversion time: 0.029 us
   Spec: < 500 us → PASS
   Saved: plots/conversion_timing.png
 
 === TB4: Power Measurement ===
-  Comparator avg current (at 10 MHz): 5.625 uA
-  Comparator power at 10 MHz: 10.126 uW
+  Comparator avg current (at 10 MHz): 8.514 uA
+  Comparator power at 10 MHz: 15.325 uW
   Duty cycle at 1 kSPS: 0.001200
-  Comparator power at 1 kSPS: 0.0122 uW
+  Comparator power at 1 kSPS: 0.0184 uW
   DAC switching power: 0.0796 uW
-  Total estimated power: 0.092 uW
+  Total estimated power: 0.098 uW
   Spec: < 10 uW → PASS
   Saved: plots/power_vs_sample_rate.png
 
@@ -26,8 +26,8 @@
 
 === TB1: Static Linearity (DNL/INL) ===
   Using mismatched DAC capacitors
-  DNL max: 0.1250 LSB
-  INL max: 0.0938 LSB
+  DNL max: 0.3437 LSB
+  INL max: 0.2299 LSB
   Missing codes: 0
   DNL spec: < 1.0 LSB → PASS
   INL spec: < 2.0 LSB → PASS
@@ -36,10 +36,10 @@
 === TB2: Dynamic Performance (ENOB) ===
   Using mismatched DAC capacitors
   Input frequency: 31.01 Hz
-  SINAD: 72.22 dB
-  ENOB:  11.70 bits
-  THD:   -93.63 dB
-  SFDR:  83.83 dB
+  SINAD: 71.87 dB
+  ENOB:  11.65 bits
+  THD:   -85.15 dB
+  SFDR:  83.13 dB
   ENOB spec: > 10 bits → PASS
   Saved: plots/fft_spectrum.png
 
@@ -54,7 +54,7 @@
 === TB6: Noise Floor ===
   DC input: 0.900 V (mid-scale)
   Mean code: 2047.2
-  Code std (noise): 0.678 LSB rms
+  Code std (noise): 0.656 LSB rms
   Expected code: 2048
   Noise spec: < 1.5 LSB rms → PASS
   Saved: plots/noise_histogram.png
@@ -62,17 +62,17 @@
 ============================================================
   SCORING
 ============================================================
-  enob: 11.7047 (target > 10.0) → PASS
-  dnl_lsb: 0.1250 (target < 1.0) → PASS
-  inl_lsb: 0.0938 (target < 2.0) → PASS
-  conversion_time_us: 0.0306 (target < 500.0) → PASS
-  power_uw: 0.0918 (target < 10.0) → PASS
+  enob: 11.6456 (target > 10.0) → PASS
+  dnl_lsb: 0.3437 (target < 1.0) → PASS
+  inl_lsb: 0.2299 (target < 2.0) → PASS
+  conversion_time_us: 0.0288 (target < 500.0) → PASS
+  power_uw: 0.0980 (target < 10.0) → PASS
   input_range_v: 1.7982 (target > 1.5) → PASS
 
   Score: 1.0000 (6/6 specs met)
 
 --- Honest Assessment: VCM-dependent offset ---
-  DNL max (VCM offset): 0.125 LSB
+  DNL max (VCM offset): 0.312 LSB
   Missing codes: 0
 
 ============================================================
@@ -87,8 +87,8 @@
   Run 200/200...
 
   Monte Carlo Results (200 runs):
-  DNL max:  mean=0.192, std=0.090, worst=0.500 LSB
-  INL max:  mean=0.151, std=0.056, worst=0.313 LSB
+  DNL max:  mean=0.200, std=0.099, worst=0.500 LSB
+  INL max:  mean=0.152, std=0.056, worst=0.375 LSB
   ENOB:     mean=10.25, std=0.03, worst=10.15 bits
   Missing codes: 0 runs with missing codes
   DNL < 1.0 LSB in 200/200 runs (100%)
@@ -96,35 +96,35 @@
   Saved: plots/monte_carlo.png
 
 --- Cap size sensitivity ---
-  5x5 um: sigma/C=0.560%, DNL worst=1.000, yield=100%
-  7x7 um: sigma/C=0.400%, DNL worst=0.750, yield=100%
-  10x10 um: sigma/C=0.280%, DNL worst=0.375, yield=100%
-  15x15 um: sigma/C=0.187%, DNL worst=0.250, yield=100%
+  5x5 um: sigma/C=0.560%, DNL worst=0.875, yield=100%
+  7x7 um: sigma/C=0.400%, DNL worst=0.625, yield=100%
+  10x10 um: sigma/C=0.280%, DNL worst=0.500, yield=100%
+  15x15 um: sigma/C=0.187%, DNL worst=0.375, yield=100%
 
 === TB7b: PVT Corner Analysis ===
-  tt  -40C: delay=0.70 ns, decision=correct
-  tt   27C: delay=0.60 ns, decision=correct
-  tt  125C: delay=0.50 ns, decision=correct
-  ss  -40C: delay=1.40 ns, decision=correct
-  ss   27C: delay=1.00 ns, decision=correct
-  ss  125C: delay=0.80 ns, decision=correct
-  ff  -40C: delay=0.40 ns, decision=correct
-  ff   27C: delay=0.32 ns, decision=correct
-  ff  125C: delay=0.40 ns, decision=correct
-  sf  -40C: delay=0.50 ns, decision=correct
-  sf   27C: delay=0.40 ns, decision=correct
-  sf  125C: delay=0.40 ns, decision=correct
-  fs  -40C: delay=1.50 ns, decision=correct
-  fs   27C: delay=1.00 ns, decision=correct
-  fs  125C: delay=0.90 ns, decision=correct
+  tt  -40C: delay=0.50 ns, decision=correct
+  tt   27C: delay=0.40 ns, decision=correct
+  tt  125C: delay=0.40 ns, decision=correct
+  ss  -40C: delay=0.90 ns, decision=correct
+  ss   27C: delay=0.70 ns, decision=correct
+  ss  125C: delay=0.60 ns, decision=correct
+  ff  -40C: delay=0.25 ns, decision=correct
+  ff   27C: delay=0.25 ns, decision=correct
+  ff  125C: delay=0.25 ns, decision=correct
+  sf  -40C: delay=0.39 ns, decision=correct
+  sf   27C: delay=0.28 ns, decision=correct
+  sf  125C: delay=0.25 ns, decision=correct
+  fs  -40C: delay=0.90 ns, decision=correct
+  fs   27C: delay=0.70 ns, decision=correct
+  fs  125C: delay=0.60 ns, decision=correct
 
-  Worst-case delay: 1.50 ns
+  Worst-case delay: 0.90 ns
   Wrong decisions: 0/15
   Saved: plots/pvt_linearity.png
 
 --- VCM-Dependent Offset Impact ---
-  No VCM offset: DNL max=0.125 LSB, missing=0
-  With VCM offset: DNL max=0.125 LSB, missing=0
+  No VCM offset: DNL max=0.375 LSB, missing=0
+  With VCM offset: DNL max=0.250 LSB, missing=0
 
 --- Supply Variation (±10%) ---
   VDD=1.62V: codes 0-4095, monotonic=Yes

@@ -1,6 +1,6 @@
 # Programmable Gain Amplifier (PGA) — SKY130
 
-## Status: Phase A Complete (Score 1.00, 7/7 specs met)
+## Status: Phase B In Progress (Score 1.00, 7/7 specs met, PVT PASS)
 
 ## Architecture
 
@@ -91,8 +91,26 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 2. **Resistor values**: 10 MΩ poly resistors require ~5000 squares — very large area. Real implementation might use T-network or capacitive feedback to reduce resistor values.
 3. **Phase margin at G=1**: AC response shows some peaking near 800 kHz. While outside biosignal BW, this needs investigation in Phase B.
 4. **Output swing**: At G=128, max linear output swing is ±5.5 mV around VCM=0.9V. Only suitable for very small signals (EEG: 10-100 µV).
-5. **PVT robustness**: Not yet validated. Corner simulations needed in Phase B.
+5. **SF corner gain error**: 1.13% at G=128 (exceeds 1% nominal spec, within 2% relaxed PVT spec). Could be improved with higher DC gain margin.
 6. **Gain switching**: Current design uses parameterized Rin. Real implementation needs transmission gates with on-resistance << Rin.
+
+## PVT Corner Results (TB6)
+
+![PVT Gain](plots/pvt_gain.png)
+
+Tested gain=128 across 5 corners x 3 temperatures (15 conditions). Relaxed target: gain error < 2%.
+
+| Corner | -40C Error | 27C Error | 125C Error | -40C BW | 27C BW | 125C BW |
+|--------|-----------|----------|-----------|---------|--------|---------|
+| tt | 0.86% | 0.87% | 0.94% | 18.2 kHz | 15.8 kHz | 12.6 kHz |
+| ss | 0.93% | 0.93% | 0.98% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
+| ff | 0.82% | 0.84% | 0.90% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
+| sf | 1.13% | 1.10% | 1.12% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
+| fs | 0.74% | 0.77% | 0.84% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
+
+- **Worst gain error**: 1.13% (SF, -40C) — within 2% PVT limit
+- **Worst BW**: 12.6 kHz (tt/ss/fs, 125C) — above 10 kHz target
+- **All 15 conditions PASS**
 
 ## Experiment History
 

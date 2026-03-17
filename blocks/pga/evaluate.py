@@ -527,5 +527,95 @@ def main():
     return score, specs_met, measurements
 
 
+def tb6_pvt():
+    """TB6: PVT corner sweep — gain accuracy at G=128 across corners and temps."""
+    corners = ['tt', 'ss', 'ff', 'sf', 'fs']
+    temps = [-40, 27, 125]
+    results = {}
+
+    print("\n--- TB6: PVT Corner Sweep (gain=128) ---")
+    for corner in corners:
+        for temp in temps:
+            g = 128
+            rin_val = RF_VAL / g
+            netlist = f"""* TB6: PVT — corner={corner}, T={temp}C, gain={g}
+.lib "{SKY130_LIB}" {corner}
+.temp {temp}
+
+Vdd vdd 0 {VDD}
+Vss vss 0 0
+Vcm vcm_node 0 {VCM}
+
+{opamp_subckt()}
+
+X1 vcm_node vminus vout vdd vss opamp
+Rf vminus vout {RF_VAL}
+Rin vin vminus {rin_val}
+Vin vin 0 dc {VCM} ac 1
+
+.control
+ac dec 50 0.1 100Meg
+wrdata _pvt_{corner}_{temp}.dat v(vout)
+.endc
+.end
+"""
+            stdout, stderr, rc = run_ngspice(netlist, f'pvt_{corner}_{temp}')
+            data = read_wrdata(f'_pvt_{corner}_{temp}.dat')
+
+            if data is not None and len(data) > 5:
+                freqs = data[:, 0]
+                if data.shape[1] >= 3:
+                    mags = np.sqrt(data[:, 1]**2 + data[:, 2]**2)
+                else:
+                    mags = np.abs(data[:, 1])
+
+                low_idx = np.argmin(np.abs(freqs - 1.0))
+                lf_gain = mags[low_idx]
+                error = abs(lf_gain - g) / g * 100
+
+                gain_3db = lf_gain / math.sqrt(2)
+                bw_idx = np.where(mags < gain_3db)[0]
+                bw = freqs[bw_idx[0]] if len(bw_idx) > 0 else freqs[-1]
+
+                results[(corner, temp)] = {'gain': lf_gain, 'error': error, 'bw': bw}
+                status = 'PASS' if error < 2.0 else 'FAIL'
+                print(f"  {corner:2s} {temp:4d}C: gain={lf_gain:.2f}, err={error:.2f}%, BW={bw:.0f} Hz [{status}]")
+            else:
+                results[(corner, temp)] = {'gain': 0, 'error': 100, 'bw': 0}
+                print(f"  {corner:2s} {temp:4d}C: SIMULATION FAILED")
+
+    # Plot PVT results
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+    for corner in corners:
+        errs = [results.get((corner, t), {}).get('error', 100) for t in temps]
+        bws = [results.get((corner, t), {}).get('bw', 0) for t in temps]
+        ax1.plot(temps, errs, 'o-', label=corner)
+        ax2.plot(temps, [b/1000 for b in bws], 'o-', label=corner)
+
+    ax1.axhline(y=2.0, color='red', linestyle='--', label='2% limit')
+    ax1.set_xlabel('Temperature (C)'); ax1.set_ylabel('Gain Error (%)')
+    ax1.set_title('PVT: Gain Error at G=128'); ax1.legend(); ax1.grid(True, alpha=0.3)
+
+    ax2.axhline(y=10, color='red', linestyle='--', label='10 kHz target')
+    ax2.set_xlabel('Temperature (C)'); ax2.set_ylabel('Bandwidth (kHz)')
+    ax2.set_title('PVT: Bandwidth at G=128'); ax2.legend(); ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOT_DIR, 'pvt_gain.png'), dpi=150)
+    plt.close()
+
+    worst_pvt_error = max(r['error'] for r in results.values())
+    worst_pvt_bw = min(r['bw'] for r in results.values())
+    pvt_pass = worst_pvt_error < 2.0 and worst_pvt_bw > 10000
+    print(f"\n  PVT worst error: {worst_pvt_error:.2f}%, worst BW: {worst_pvt_bw:.0f} Hz")
+    print(f"  PVT result: {'PASS' if pvt_pass else 'FAIL'}")
+
+    return results, pvt_pass
+
+
 if __name__ == '__main__':
     score, specs_met, measurements = main()
+
+    if score >= 1.0:
+        print("\n\nPhase A complete. Running Phase B: PVT corners...")
+        pvt_results, pvt_pass = tb6_pvt()

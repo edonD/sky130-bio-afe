@@ -79,7 +79,10 @@ Real NMOS loads contribute significant 1/f noise (NMOS Kf ~10× PMOS Kf). Using 
 Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output at 0.9V ± 31 mV (0.869V to 0.931V). Well within PGA input range (0.2-1.6V).
 
 ## Known Limitations
-1. **CMRR is unrealistically high** (267 dB): ideal matching in sim. Real silicon ~80-100 dB from mismatch.
+1. **CMRR is unrealistically high** (260 dB): ideal matching in sim. With realistic MIM cap matching:
+   - 0.1% mismatch → CMRR ≈ 77 dB (FAILS 100 dB spec)
+   - 0.05% mismatch → CMRR ≈ 83 dB (FAILS 100 dB spec)
+   - Need < 0.006% matching for 100 dB → **chopping required** in real silicon
 2. **Offset is zero**: perfect symmetry in simulation. Real offset from mismatch.
 3. **Noiseless loads are idealized**: real current source loads would add noise.
 4. **Noise margin at hot corner**: fs at 125°C = 1.22 µVrms (19% margin).

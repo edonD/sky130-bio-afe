@@ -33,9 +33,9 @@ Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 * PMOS mirror load
 XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
 XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
-* NMOS diff pair (wider for lower 1/f noise)
-XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=12u l=1u
-XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=12u l=1u
+* NMOS diff pair (wide for low 1/f noise — 20u for good flicker noise)
+XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=20u l=1u
+XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=20u l=1u
 * Tail current source (~300 nA)
 XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 * Stage 2: PMOS CS driver

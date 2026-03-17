@@ -1,0 +1,10 @@
+parameter,min,max,default,unit,description
+wp_in,10u,100u,50u,m,Input PMOS pair width
+lp_in,0.5u,4u,2u,m,Input PMOS pair length
+wn_load,2u,20u,5u,m,NMOS load width
+ln_load,0.5u,4u,2u,m,NMOS load length
+wp_tail,5u,30u,10u,m,PMOS tail width
+lp_tail,1u,4u,2u,m,PMOS tail length
+ibias_val,0.5u,10u,2u,A,Bias current
+cin_val,5p,20p,10p,F,Input coupling capacitor
+cfb_val,100f,500f,200f,F,Feedback capacitor

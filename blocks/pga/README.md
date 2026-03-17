@@ -125,7 +125,7 @@ Tested at gain=1 with 0.7V amplitude input: output 0.200V to 1.600V (1.40 Vpp). 
 | 1.0V | 0.021% |
 | 1.2V | 0.021% |
 
-THD is flat across amplitudes, indicating excellent linearity well within the output range. The constant 0.021% may represent the simulation noise floor — real silicon THD would likely be higher.
+THD is flat across amplitudes (0.021% from quick FFT). A high-fidelity measurement (10 cycles, 10µs step, 100k points) reveals the true THD is **0.0017%** — the 0.021% was the FFT noise floor. Individual harmonics: H2=-103dB, H3=-109dB, H4=-112dB. This represents 60x margin over the 0.1% spec.
 
 ### Realistic EEG Signal
 50 µV input at G=128: output Vpp = 12.72 mV (expected 12.8 mV). Clean, no clipping, centered at VCM.

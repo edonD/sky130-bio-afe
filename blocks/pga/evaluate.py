@@ -60,7 +60,7 @@ Ibias vdd nbias 0.9u
 XMn_diode nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
 
 * ─── First stage: NMOS diff pair + PMOS active load ───
-* Tail = 2uA (m=2 mirror), 1uA per side
+* Tail = 1.8uA (m=2 from 0.9uA ref), 0.9uA per side
 XM5 tail nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=2
 * Diff pair: W=8u L=4u (wide for high gm, long for good rds)
 XM1 d1 inp tail vss sky130_fd_pr__nfet_01v8 w=8u l=4u m=1

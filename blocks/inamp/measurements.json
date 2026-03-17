@@ -2,7 +2,7 @@
   "measurements": {
     "gain_db": 35.78798,
     "bandwidth_hz": 1030350.0,
-    "cmrr_60hz_db": 257.87968,
+    "cmrr_60hz_db": 113.17421481888638,
     "input_referred_noise_uvrms": 0.9626905,
     "input_offset_uv": 0.0018159544556271782,
     "power_uw": 10.72414

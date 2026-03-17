@@ -1,4 +1,7 @@
 step	commit	score	specs_met	description
 0	04afc3b	0.90	5/6	initial baseline — wrong StrongARM topology, broken timing MEAS parsing
 1	8b22f07	1.00	6/6	fixed topology (NMOS latch to fn/fp), wrdata parser, delay measurement
-2	pending	1.00	6/6	Phase B: MC 200 runs (100% yield DNL<1.0), PVT 15/15 pass, mismatch model
+2	39a4419	1.00	6/6	Phase B: MC 200 runs (100% yield DNL<1.0), PVT 15/15 pass, mismatch model
+3	54b6d04	1.00	6/6	Cap sensitivity (5um=99%, 7um=100%), supply ±10% pass
+4	648dfa3	1.00	6/6	VCM offset model: 10 missing codes at extremes, OK for bio app
+5	pending	1.00	6/6	Higher DNL resolution (32pts/code), 2-stage comp investigated

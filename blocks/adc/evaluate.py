@@ -584,7 +584,7 @@ def measure_linearity(comp_offset=0.0, comp_noise_rms=0.0, cap_weights=None):
         print("  Using mismatched DAC capacitors")
 
     # Ramp input with many points per code for accurate transition detection
-    n_points = NCODES * 8  # 8 points per LSB
+    n_points = NCODES * 32  # 32 points per LSB → 1/32 LSB resolution
     v_in = np.linspace(0, VREF, n_points, endpoint=False)
     codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, comp_noise_rms,
                               cap_weights)

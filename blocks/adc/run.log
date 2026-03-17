@@ -26,7 +26,7 @@
 
 === TB1: Static Linearity (DNL/INL) ===
   Using mismatched DAC capacitors
-  DNL max: 0.1250 LSB
+  DNL max: 0.1563 LSB
   INL max: 0.1250 LSB
   Missing codes: 0
   DNL spec: < 1.0 LSB → PASS
@@ -36,10 +36,10 @@
 === TB2: Dynamic Performance (ENOB) ===
   Using mismatched DAC capacitors
   Input frequency: 31.01 Hz
-  SINAD: 72.14 dB
+  SINAD: 72.11 dB
   ENOB:  11.69 bits
-  THD:   -91.54 dB
-  SFDR:  83.51 dB
+  THD:   -91.64 dB
+  SFDR:  83.78 dB
   ENOB spec: > 10 bits → PASS
   Saved: plots/fft_spectrum.png
 
@@ -53,8 +53,8 @@
 
 === TB6: Noise Floor ===
   DC input: 0.900 V (mid-scale)
-  Mean code: 2047.2
-  Code std (noise): 0.654 LSB rms
+  Mean code: 2047.3
+  Code std (noise): 0.656 LSB rms
   Expected code: 2048
   Noise spec: < 1.5 LSB rms → PASS
   Saved: plots/noise_histogram.png
@@ -62,8 +62,8 @@
 ============================================================
   SCORING
 ============================================================
-  enob: 11.6912 (target > 10.0) → PASS
-  dnl_lsb: 0.1250 (target < 1.0) → PASS
+  enob: 11.6854 (target > 10.0) → PASS
+  dnl_lsb: 0.1563 (target < 1.0) → PASS
   inl_lsb: 0.1250 (target < 2.0) → PASS
   conversion_time_us: 0.0306 (target < 500.0) → PASS
   power_uw: 0.0918 (target < 10.0) → PASS
@@ -83,17 +83,17 @@
   Run 200/200...
 
   Monte Carlo Results (200 runs):
-  DNL max:  mean=0.187, std=0.086, worst=0.625 LSB
-  INL max:  mean=0.150, std=0.053, worst=0.313 LSB
-  ENOB:     mean=10.26, std=0.03, worst=10.17 bits
+  DNL max:  mean=0.200, std=0.088, worst=0.500 LSB
+  INL max:  mean=0.155, std=0.056, worst=0.375 LSB
+  ENOB:     mean=10.25, std=0.03, worst=10.18 bits
   Missing codes: 0 runs with missing codes
   DNL < 1.0 LSB in 200/200 runs (100%)
   DNL < 1.5 LSB in 200/200 runs
   Saved: plots/monte_carlo.png
 
 --- Cap size sensitivity ---
-  5x5 um: sigma/C=0.560%, DNL worst=1.000, yield=100%
-  7x7 um: sigma/C=0.400%, DNL worst=0.625, yield=100%
+  5x5 um: sigma/C=0.560%, DNL worst=0.875, yield=100%
+  7x7 um: sigma/C=0.400%, DNL worst=0.750, yield=100%
   10x10 um: sigma/C=0.280%, DNL worst=0.500, yield=100%
   15x15 um: sigma/C=0.187%, DNL worst=0.375, yield=100%
 
@@ -119,8 +119,8 @@
   Saved: plots/pvt_linearity.png
 
 --- VCM-Dependent Offset Impact ---
-  No VCM offset: DNL max=0.125 LSB, missing=0
-  With VCM offset: DNL max=0.125 LSB, missing=10
+  No VCM offset: DNL max=0.250 LSB, missing=0
+  With VCM offset: DNL max=0.250 LSB, missing=10
 
 --- Supply Variation (±10%) ---
   VDD=1.62V: codes 0-4095, monotonic=Yes

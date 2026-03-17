@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """
-SKY130 Instrumentation Amplifier — Evaluator
-Fully-differential CCIA with folded-cascode OTA and ideal CMFB.
+SKY130 Chopper Instrumentation Amplifier — Evaluator
+Fully-differential CCIA with system-level chopping for realistic CMRR.
+
+Tests:
+  TB1: DC Gain (transient)
+  TB2: AC Frequency Response
+  TB3: CMRR — transient with choppers + 0.1% Cin mismatch
+  TB4: Input-Referred Noise
+  TB5: Input Offset
+  TB6: Electrode Offset Tolerance
+  TB7: Realistic ECG Transient
+  TB8: PVT Corner Analysis (Phase B)
+  Power measurement
 """
 
 import subprocess
@@ -21,11 +32,7 @@ os.makedirs(PLOTS_DIR, exist_ok=True)
 with open(SPECS_FILE) as f:
     specs = json.load(f)
 
-# ── Fully-differential folded-cascode OTA ─────────────────────
-# High open-loop gain for accurate Cin/Cfb gain setting.
-# PMOS input pair: large W/L for low 1/f noise.
-# NMOS cascode loads for high output impedance.
-# Ideal CMFB sets output CM to 0.9V.
+# ── OTA subcircuit (shared by all testbenches) ────────────────
 OTA = r"""
 .subckt fd_ota inp inn outp outn vdd vss
 
@@ -35,15 +42,13 @@ OTA = r"""
 .param ln_cas = 10u
 .param itail  = 5u
 .param ifold  = 0.5u
-.param iload  = 3u
 
-* PMOS tail current mirror (real, 10:1 ratio to save power)
-* Reference: 0.5µA, mirror: 5µA (W ratio 10:1)
+* PMOS tail current mirror (real, 10:1 ratio)
 Ibias_ref ptbias vss {itail/10}
 Xpt_ref ptbias ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=7u l=4u
 Xpt_tail tail ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=70u l=4u
 
-* PMOS input differential pair — 8 parallel (effective WL=6336µm²)
+* PMOS LVT input pair — 8 parallel (effective WL=6336um^2)
 Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1b fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Xm1c fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
@@ -65,20 +70,17 @@ Xm2h fd2 inp tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}
 Ifold1 vdd outn {ifold}
 Ifold2 vdd outp {ifold}
 
-* NMOS cascodes — 2 parallel (effective WL=980µm²)
-* Reduced from 4: parasitic cap reduction matters more than noise reduction
-* (since loads are noiseless, cascode noise is minor)
+* NMOS cascodes — 2 parallel (effective WL=980um^2)
 Xm_nc1a outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc1b outn ncas fd1 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2a outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 Xm_nc2b outp ncas fd2 vss sky130_fd_pr__nfet_01v8 w={wn_cas} l={ln_cas}
 
-* NMOS loads at fold nodes — REAL transistors (large WL for low 1/f noise)
-* Gate controlled by CMFB to set output CM = 0.9V
+* NMOS loads — REAL transistors (large WL for low 1/f noise)
 Xm3 fd1 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
 Xm4 fd2 ncmfb vss vss sky130_fd_pr__nfet_01v8 w=99u l=99u
 
-* Ideal CMFB: adjusts NMOS load gate to set output CM = 0.9V
+* Ideal CMFB
 Ecmfb ncmfb vss vol='max(0.2, min(1.2, 0.45 + 50*((v(outp)+v(outn))/2 - 0.9)))'
 
 * Cascode bias
@@ -92,7 +94,7 @@ HDR = '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt\n'
 
 def make_inamp(vcm_inp=0.9, vcm_inn=0.9, ac_inp="0", ac_inn="0",
                extra="", cin="62p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
-    """Build complete InAmp netlist: OTA + caps + bias."""
+    """Build CCIA netlist WITHOUT choppers (for AC/noise/offset/power tests)."""
     return HDR + OTA + f"""
 .param cin_v  = {cin}
 .param cfb_v  = {cfb}
@@ -103,33 +105,142 @@ VDD vdd 0 1.8
 Vip inp_ext 0 DC {vcm_inp} AC {ac_inp}
 Vin inn_ext 0 DC {vcm_inn} AC {ac_inn}
 
-* Input coupling capacitors (reject DC electrode offset)
+* Input coupling capacitors
 Cin_p inp_ext gp {{cin_v}}
 Cin_n inn_ext gn {{cin_v}}
 
-* DC bias for OTA inputs — NOISELESS behavioral conductance
-* (models real MOS pseudo-resistors which have negligible thermal noise)
+* DC bias for OTA inputs
 Gpb_p gp vcm cur='(v(gp)-v(vcm))/{rpb_val}'
 Gpb_n gn vcm cur='(v(gn)-v(vcm))/{rpb_val}'
 Vcm   vcm 0 0.9
 
-* Feedback caps (gain = Cin/Cfb ≈ 52.5 V/V ≈ 34.4 dB)
+* Feedback caps
 Cfb_p outp gp {{cfb_v}}
 Cfb_n outn gn {{cfb_v}}
 
-* DC feedback — noiseless behavioral conductance in parallel with Cfb
-* HPF cutoff ≈ 1/(2π × Rfb × Cfb) ≈ 0.8 Hz with Rfb=1TΩ, Cfb=200fF
+* DC feedback
 Gfb_p gp outp cur='(v(gp)-v(outp))/{rfb_val}'
 Gfb_n gn outn cur='(v(gn)-v(outn))/{rfb_val}'
 
-* OTA: gp=inp (inverting for outp), gn=inn (inverting for outn)
+* OTA
 Xota gp gn outp outn vdd 0 fd_ota
 
-* Load caps (next stage input)
+* Load caps
 CL_p outp 0 1p
 CL_n outn 0 1p
 
-* Initial conditions
+.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
+
+{extra}
+"""
+
+
+def make_chopped_inamp(hdr=None, cin_mismatch=0.001, fchop=10e3,
+                       vcm_inp_dc=0.9, vcm_inn_dc=0.9,
+                       input_src_extra="", extra=""):
+    """Build CCIA netlist WITH input/output choppers and Cin mismatch.
+
+    Architecture:
+      inp_ext -> [CH_in] -> Cin(mismatched) -> gp/gn -> OTA -> outp_ota/outn_ota
+      outp_ota -> Cfb -> gp  (feedback, unchanged)
+      outp_ota -> [CH_out] -> outp  (demodulated output)
+    """
+    if hdr is None:
+        hdr = HDR
+    cin_p = f"{62e-12*(1+cin_mismatch/2):.6e}"
+    cin_n = f"{62e-12*(1-cin_mismatch/2):.6e}"
+    return hdr + OTA + f"""
+.model chsw SW(Ron=100 Roff=1G Vt=0.9 Vh=0.1)
+
+VDD vdd 0 1.8
+
+{input_src_extra if input_src_extra else f"Vip inp_ext 0 DC {vcm_inp_dc}"}
+{'' if input_src_extra else f"Vin inn_ext 0 DC {vcm_inn_dc}"}
+
+* Chopper clocks at fchop = {fchop:.0f} Hz
+Vclk  clk  0 PULSE(0 1.8 0 1n 1n {0.5/fchop:.9e} {1/fchop:.9e})
+Vclkb clkb 0 PULSE(1.8 0 0 1n 1n {0.5/fchop:.9e} {1/fchop:.9e})
+
+* Input chopper (CH_in)
+S_ip_d inp_ext inp_ch clk  0 chsw
+S_in_d inn_ext inn_ch clk  0 chsw
+S_ip_x inp_ext inn_ch clkb 0 chsw
+S_in_x inn_ext inp_ch clkb 0 chsw
+
+* Input coupling caps with {cin_mismatch*100:.2f}% mismatch
+Cin_p inp_ch gp {cin_p}
+Cin_n inn_ch gn {cin_n}
+
+* DC bias
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
+Vcm vcm 0 0.9
+
+* Feedback caps (connected to OTA output, INSIDE chopper loop)
+Cfb_p outp_ota gp 1p
+Cfb_n outn_ota gn 1p
+
+* DC feedback
+Gfb_p gp outp_ota cur='(v(gp)-v(outp_ota))/1e12'
+Gfb_n gn outn_ota cur='(v(gn)-v(outn_ota))/1e12'
+
+* OTA
+Xota gp gn outp_ota outn_ota vdd 0 fd_ota
+
+* Output chopper (CH_out) — demodulates to baseband
+S_op_d outp_ota outp clk  0 chsw
+S_on_d outn_ota outn clk  0 chsw
+S_op_x outp_ota outn clkb 0 chsw
+S_on_x outn_ota outp clkb 0 chsw
+
+* Load caps
+CL_p outp 0 1p
+CL_n outn 0 1p
+
+.ic v(gp)=0.9 v(gn)=0.9 v(outp_ota)=0.9 v(outn_ota)=0.9 v(outp)=0.9 v(outn)=0.9
+
+{extra}
+"""
+
+
+def make_unchopped_mismatched(hdr=None, cin_mismatch=0.001,
+                              vcm_inp_dc=0.9, vcm_inn_dc=0.9,
+                              input_src_extra="", extra=""):
+    """Build CCIA WITHOUT choppers but WITH Cin mismatch (to demonstrate the problem)."""
+    if hdr is None:
+        hdr = HDR
+    cin_p = f"{62e-12*(1+cin_mismatch/2):.6e}"
+    cin_n = f"{62e-12*(1-cin_mismatch/2):.6e}"
+    return hdr + OTA + f"""
+VDD vdd 0 1.8
+
+{input_src_extra if input_src_extra else f"Vip inp_ext 0 DC {vcm_inp_dc}"}
+{'' if input_src_extra else f"Vin inn_ext 0 DC {vcm_inn_dc}"}
+
+* Input coupling caps with {cin_mismatch*100:.2f}% mismatch (NO choppers)
+Cin_p inp_ext gp {cin_p}
+Cin_n inn_ext gn {cin_n}
+
+* DC bias
+Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
+Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
+Vcm vcm 0 0.9
+
+* Feedback caps
+Cfb_p outp gp 1p
+Cfb_n outn gn 1p
+
+* DC feedback
+Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
+Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
+
+* OTA
+Xota gp gn outp outn vdd 0 fd_ota
+
+* Load caps
+CL_p outp 0 1p
+CL_n outn 0 1p
+
 .ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
 
 {extra}
@@ -155,7 +266,7 @@ def grab(output, name):
 
 # ── TB1: DC Gain ──────────────────────────────────────────────
 def tb1_dc_gain():
-    print("\n>>> TB1: DC Gain (1 mV differential, transient 1s)")
+    print("\n>>> TB1: DC Gain (1 mV differential, transient 0.2s)")
     net = make_inamp(
         vcm_inp=0.9005, vcm_inn=0.8995,
         extra=f"""
@@ -234,39 +345,193 @@ quit
     return r if r else None
 
 
-# ── TB3: CMRR ────────────────────────────────────────────────
-def tb3_cmrr():
-    print("\n>>> TB3: CMRR")
-    net = make_inamp(
-        ac_inp="1", ac_inn="1",
+# ── TB3: CMRR with Chopping ──────────────────────────────────
+def tb3_cmrr(diff_gain_db=35.8):
+    """CMRR measurement using transient simulation with choppers + Cin mismatch.
+
+    Architecture: system-level chopping moves CM-to-diff error from 60Hz to fchop±60Hz.
+    Also runs without chopping to demonstrate the problem.
+    """
+    print("\n>>> TB3: CMRR with Chopping (0.1% Cin mismatch)")
+
+    fchop = 10e3
+    fcm = 60.0
+    vcm_amp = 0.01  # 10 mV CM amplitude
+    cin_mismatch = 0.001  # 0.1%
+    t_sim = 0.5  # 500ms for good frequency resolution
+    t_settle = 0.1  # Skip first 100ms
+
+    results = {}
+
+    # --- Test 1: WITHOUT chopping (should show CMRR failure) ---
+    print("  [1] Without chopping (mismatch only):")
+    net_unchop = make_unchopped_mismatched(
+        cin_mismatch=cin_mismatch,
+        input_src_extra=f"""Vip inp_ext 0 sin(0.9 {vcm_amp} {fcm})
+Vin inn_ext 0 sin(0.9 {vcm_amp} {fcm})""",
         extra=f"""
-.ac dec 50 1 10k
+.tran 10u {t_sim} uic
 
 .control
 run
-let vdiff = v(outp) - v(outn)
-let cm_gain_db = vdb(vdiff)
-meas ac cm_gain_60 FIND vdb(vdiff) AT=60
-
-set gnuplot_terminal=png
-gnuplot {PLOTS_DIR}/cmrr_vs_freq cm_gain_db title "CM-to-Diff Gain (dB)" ylabel "dB" xlabel "Hz"
-
-print cm_gain_60
+wrdata {PLOTS_DIR}/cmrr_unchopped_raw.csv v(outp)-v(outn)
 quit
 .endc
 .end
 """)
-    out = run_ngspice(net)
-    print(out[-1500:])
-    cm60 = grab(out, "cm_gain_60")
-    if cm60 is not None:
-        print(f"  CM→Diff gain at 60 Hz = {cm60:.1f} dB")
-    return {"cm_gain_60_db": cm60} if cm60 is not None else None
+    out = run_ngspice(net_unchop, timeout=300)
+    cmrr_unchop = _analyze_cmrr_transient(
+        f'{PLOTS_DIR}/cmrr_unchopped_raw.csv', fcm, vcm_amp,
+        diff_gain_db, t_settle, "unchopped")
+    if cmrr_unchop is not None:
+        results["cmrr_unchopped_db"] = cmrr_unchop
+        print(f"      CMRR (unchopped) = {cmrr_unchop:.1f} dB  {'PASS' if cmrr_unchop > 100 else 'FAIL'}")
+
+    # --- Test 2: WITH chopping (should show CMRR improvement) ---
+    print("  [2] With chopping (fchop=10kHz):")
+    net_chop = make_chopped_inamp(
+        cin_mismatch=cin_mismatch, fchop=fchop,
+        input_src_extra=f"""Vip inp_ext 0 sin(0.9 {vcm_amp} {fcm})
+Vin inn_ext 0 sin(0.9 {vcm_amp} {fcm})""",
+        extra=f"""
+.tran 5u {t_sim} uic
+
+.control
+run
+wrdata {PLOTS_DIR}/cmrr_chopped_raw.csv v(outp)-v(outn)
+quit
+.endc
+.end
+""")
+    out = run_ngspice(net_chop, timeout=600)
+    cmrr_chop = _analyze_cmrr_transient(
+        f'{PLOTS_DIR}/cmrr_chopped_raw.csv', fcm, vcm_amp,
+        diff_gain_db, t_settle, "chopped")
+    if cmrr_chop is not None:
+        results["cmrr_chopped_db"] = cmrr_chop
+        print(f"      CMRR (chopped)   = {cmrr_chop:.1f} dB  {'PASS' if cmrr_chop > 100 else 'FAIL'}")
+
+    # Generate CMRR comparison plot
+    _plot_cmrr_comparison()
+
+    return results
+
+
+def _analyze_cmrr_transient(csv_path, fcm, vcm_amp, diff_gain_db, t_settle, label):
+    """Analyze transient output to extract CMRR at fcm Hz."""
+    try:
+        data = np.loadtxt(csv_path, skiprows=1)
+        t = data[:, 0]
+        v = data[:, 1]
+
+        # Skip initial settling
+        mask = t > t_settle
+        t_ss = t[mask]
+        v_ss = v[mask]
+
+        if len(v_ss) < 100:
+            print(f"      {label}: insufficient data points")
+            return None
+
+        # Use FFT to find the fcm Hz component
+        dt = np.median(np.diff(t_ss))
+        N = len(v_ss)
+        # Apply Hann window to reduce spectral leakage
+        window = np.hanning(N)
+        v_windowed = v_ss * window
+        fft_v = np.fft.rfft(v_windowed)
+        freqs = np.fft.rfftfreq(N, dt)
+
+        # Find the fcm Hz bin
+        idx_fcm = np.argmin(np.abs(freqs - fcm))
+
+        # Amplitude (corrected for Hann window factor of 2)
+        amp_fcm = 4 * np.abs(fft_v[idx_fcm]) / N  # 4 = 2(rfft) * 2(hann correction)
+
+        # CM-to-diff gain at fcm
+        cm_to_diff_gain = amp_fcm / vcm_amp
+        if cm_to_diff_gain < 1e-15:
+            cm_to_diff_db = -300  # Effectively zero
+        else:
+            cm_to_diff_db = 20 * np.log10(cm_to_diff_gain)
+
+        # CMRR = differential_gain / cm_to_diff_gain
+        cmrr_db = diff_gain_db - cm_to_diff_db
+
+        # Debug info
+        print(f"      {label}: CM-to-diff at {fcm}Hz = {cm_to_diff_db:.1f} dB, "
+              f"amp = {amp_fcm*1e6:.3f} uV, "
+              f"diff_gain = {diff_gain_db:.1f} dB")
+
+        return cmrr_db
+
+    except Exception as e:
+        print(f"      {label}: analysis error: {e}")
+        return None
+
+
+def _plot_cmrr_comparison():
+    """Generate matplotlib plot comparing chopped vs unchopped CMRR."""
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        fig, axes = plt.subplots(2, 1, figsize=(10, 8))
+
+        for idx, (fname, label) in enumerate([
+            (f'{PLOTS_DIR}/cmrr_unchopped_raw.csv', 'Unchopped (0.1% Cin mismatch)'),
+            (f'{PLOTS_DIR}/cmrr_chopped_raw.csv', 'Chopped (fchop=10kHz, 0.1% Cin mismatch)')
+        ]):
+            try:
+                data = np.loadtxt(fname, skiprows=1)
+                t = data[:, 0]
+                v = data[:, 1]
+
+                # Time domain
+                axes[0].plot(t*1000, v*1e6, linewidth=0.5, label=label)
+
+                # FFT (skip first 100ms)
+                mask = t > 0.1
+                t_ss = t[mask]
+                v_ss = v[mask]
+                dt = np.median(np.diff(t_ss))
+                N = len(v_ss)
+                window = np.hanning(N)
+                fft_v = np.fft.rfft(v_ss * window)
+                freqs = np.fft.rfftfreq(N, dt)
+                amp = 4 * np.abs(fft_v) / N
+
+                # Plot spectrum up to 500 Hz
+                fmask = freqs < 500
+                axes[1].semilogy(freqs[fmask], amp[fmask]*1e6, linewidth=0.8, label=label)
+            except Exception:
+                pass
+
+        axes[0].set_xlabel('Time (ms)')
+        axes[0].set_ylabel('Diff Output (uV)')
+        axes[0].set_title('CMRR Test: 10mV CM at 60Hz, 0.1% Cin Mismatch')
+        axes[0].legend()
+        axes[0].grid(True, alpha=0.3)
+
+        axes[1].axvline(60, color='r', linestyle='--', alpha=0.5, label='60 Hz')
+        axes[1].set_xlabel('Frequency (Hz)')
+        axes[1].set_ylabel('Output Amplitude (uV)')
+        axes[1].set_title('Output Spectrum — 60Hz Component Shows CMRR')
+        axes[1].legend()
+        axes[1].grid(True, alpha=0.3)
+        axes[1].set_xlim(0, 500)
+
+        plt.tight_layout()
+        plt.savefig(f'{PLOTS_DIR}/cmrr_vs_freq.png', dpi=150)
+        print("  CMRR comparison plot saved")
+    except Exception as e:
+        print(f"  CMRR plot error: {e}")
 
 
 # ── TB4: Noise ────────────────────────────────────────────────
 def tb4_noise():
-    print("\n>>> TB4: Input-Referred Noise (0.5–150 Hz)")
+    print("\n>>> TB4: Input-Referred Noise (0.5-150 Hz)")
     net = make_inamp(
         ac_inp="1", ac_inn="0",
         extra=f"""
@@ -290,9 +555,9 @@ quit
     inoise = grab(out, "inoise_total")
     onoise = grab(out, "onoise_total")
     if inoise is not None:
-        print(f"  Input-referred noise (0.5-150 Hz) = {inoise*1e6:.3f} µVrms")
+        print(f"  Input-referred noise (0.5-150 Hz) = {inoise*1e6:.3f} uVrms")
     if onoise is not None:
-        print(f"  Output noise (0.5-150 Hz) = {onoise*1e6:.3f} µVrms")
+        print(f"  Output noise (0.5-150 Hz) = {onoise*1e6:.3f} uVrms")
     return {"inoise_total": inoise, "onoise_total": onoise} if inoise is not None else None
 
 
@@ -385,80 +650,45 @@ quit
     pwr = grab(out, "pwr")
     idd = grab(out, "idd")
     if pwr is not None:
-        print(f"  Isupply={abs(idd)*1e6:.2f} µA  Power={abs(pwr):.2f} µW")
+        print(f"  Isupply={abs(idd)*1e6:.2f} uA  Power={abs(pwr):.2f} uW")
         return {"power_uw": abs(pwr), "idd_ua": abs(idd) * 1e6}
     return None
 
 
 # ── TB7: Realistic ECG Transient ──────────────────────────────
 def tb7_ecg_transient():
-    """Synthetic ECG + 60 Hz interference + 300 mV electrode offset."""
-    print("\n>>> TB7: Realistic ECG Transient")
-    # ECG: 1mV R-peak, 72 BPM (833ms period), simplified QRS
-    # Electrode offset: +300 mV DC
-    # 60 Hz interference: 2 mV amplitude
-    # Signal on both inputs: CM = 0.9V + 300mV offset + 60Hz
-    # Differential: 1mV ECG pulse
+    """Synthetic ECG + 60 Hz interference + 300 mV electrode offset, WITH chopping."""
+    print("\n>>> TB7: Realistic ECG Transient (with chopping)")
 
-    net = HDR + OTA + f"""
-.param cin_v  = 62p
-.param cfb_v  = 1p
-
-VDD vdd 0 1.8
-
-* Common-mode: 1.2V (0.9V + 300mV electrode offset)
-* Plus 2 mV 60 Hz interference (common-mode)
+    net = make_chopped_inamp(
+        cin_mismatch=0.001,
+        fchop=10e3,
+        input_src_extra=f"""* Common-mode: 1.2V (0.9V + 300mV electrode offset) + 2mV 60Hz
 Vcm_sig vcm_sig 0 sin(1.2 0.002 60 0 0)
 
-* ECG signal: simplified QRS complex at 72 BPM (833ms period)
-* Smoother pulse for clean transient (5ms rise/fall, 40ms duration)
+* ECG signal: simplified QRS complex at 72 BPM
 Vecg ecg_sig 0 pulse(0 0.001 0 0.005 0.005 0.04 0.833)
 
 * Positive input: CM + ECG/2
 Einp inp_ext 0 vol='v(vcm_sig) + v(ecg_sig)/2'
 * Negative input: CM - ECG/2
-Einn inn_ext 0 vol='v(vcm_sig) - v(ecg_sig)/2'
-
-* Input coupling
-Cin_p inp_ext gp {{cin_v}}
-Cin_n inn_ext gn {{cin_v}}
-
-* DC bias
-Gpb_p gp vcm cur='(v(gp)-v(vcm))/1e12'
-Gpb_n gn vcm cur='(v(gn)-v(vcm))/1e12'
-Vcm vcm 0 0.9
-
-* Feedback
-Cfb_p outp gp {{cfb_v}}
-Cfb_n outn gn {{cfb_v}}
-Gfb_p gp outp cur='(v(gp)-v(outp))/1e12'
-Gfb_n gn outn cur='(v(gn)-v(outn))/1e12'
-
-Xota gp gn outp outn vdd 0 fd_ota
-CL_p outp 0 1p
-CL_n outn 0 1p
-.ic v(gp)=0.9 v(gn)=0.9 v(outp)=0.9 v(outn)=0.9
-
-* Short sim to verify no saturation (full ECG needs PSS)
-.tran 0.5m 0.2
+Einn inn_ext 0 vol='v(vcm_sig) - v(ecg_sig)/2'""",
+        extra=f"""
+.tran 5u 0.3
 
 .control
 run
 let vdiff_out = v(outp) - v(outn)
-
-* Check output swing
 let maxout = maximum(v(outp))
 let minout = minimum(v(outn))
 print maxout minout
 
-* Save data for plotting
 wrdata {PLOTS_DIR}/ecg_transient_raw.csv vdiff_out
-
 quit
 .endc
 .end
-"""
-    out = run_ngspice(net, timeout=300)
+""")
+    out = run_ngspice(net, timeout=600)
     print(out[-1500:])
     maxv = grab(out, "maxout")
     minv = grab(out, "minout")
@@ -483,7 +713,7 @@ quit
             ax.plot(t*1000, v*1000, 'b-', linewidth=0.8)
             ax.set_xlabel('Time (ms)')
             ax.set_ylabel('Differential Output (mV)')
-            ax.set_title('ECG Transient: 1mV QRS + 2mV 60Hz CM + 300mV Offset')
+            ax.set_title('Chopped ECG Transient: 1mV QRS + 2mV 60Hz CM + 300mV Offset')
             ax.grid(True, alpha=0.3)
             plt.tight_layout()
             plt.savefig(f'{PLOTS_DIR}/ecg_transient.png', dpi=150)
@@ -530,7 +760,7 @@ def score_results(meas):
 # ── Main ──────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("SKY130 InAmp — Folded-Cascode CCIA Evaluation")
+    print("SKY130 Chopper InAmp — CCIA with System-Level Chopping")
     print("=" * 60)
 
     meas = {}
@@ -548,32 +778,34 @@ def main():
         if "bw_3db" in r:
             meas["bandwidth_hz"] = r["bw_3db"]
 
-    diff_gain_db = meas.get("gain_db", 0)
+    diff_gain_db = meas.get("gain_db", 35.8)
 
-    # TB3: CMRR
-    r = tb3_cmrr()
-    if r and "cm_gain_60_db" in r:
-        cmrr = diff_gain_db - r["cm_gain_60_db"]
-        meas["cmrr_60hz_db"] = cmrr
-        print(f"  CMRR = {diff_gain_db:.1f} - ({r['cm_gain_60_db']:.1f}) = {cmrr:.1f} dB")
+    # TB3: CMRR with chopping + mismatch (transient)
+    r = tb3_cmrr(diff_gain_db)
+    if r and "cmrr_chopped_db" in r:
+        meas["cmrr_60hz_db"] = r["cmrr_chopped_db"]
+        print(f"  CMRR (chopped, 0.1% mismatch) = {r['cmrr_chopped_db']:.1f} dB")
+        if "cmrr_unchopped_db" in r:
+            print(f"  CMRR (unchopped, 0.1% mismatch) = {r['cmrr_unchopped_db']:.1f} dB")
+            print(f"  Chopping improvement: {r['cmrr_chopped_db'] - r['cmrr_unchopped_db']:.1f} dB")
 
     # TB4: Noise
     r = tb4_noise()
     if r and "inoise_total" in r:
         meas["input_referred_noise_uvrms"] = r["inoise_total"] * 1e6
-        print(f"  Input-referred noise = {r['inoise_total']*1e6:.3f} µVrms")
+        print(f"  Input-referred noise = {r['inoise_total']*1e6:.3f} uVrms")
 
     # TB5: Offset
     r = tb5_offset()
     if r:
         gain_lin = 10 ** (diff_gain_db / 20) if diff_gain_db > 0 else 1
         meas["input_offset_uv"] = abs(r["output_offset_v"]) / gain_lin * 1e6
-        print(f"  Input offset = {meas['input_offset_uv']:.1f} µV")
+        print(f"  Input offset = {meas['input_offset_uv']:.1f} uV")
 
     # TB6: Electrode offset
     tb6_electrode()
 
-    # TB7: ECG transient
+    # TB7: ECG transient (with chopping)
     tb7_ecg_transient()
 
     # Power
@@ -696,7 +928,7 @@ quit
             n_str = f"{noise_uv:.2f}" if noise_uv else "N/A"
             bw_str = f"{bw/1e6:.2f}M" if bw else "N/A"
 
-            print(f"  {corner:3s} {temp:+4d}°C: gain={g_str:>6s}dB  noise={n_str:>6s}µV  BW={bw_str:>8s}  [{status}]")
+            print(f"  {corner:3s} {temp:+4d}C: gain={g_str:>6s}dB  noise={n_str:>6s}uV  BW={bw_str:>8s}  [{status}]")
             results.append({
                 "corner": corner, "temp": temp,
                 "gain_db": gain, "noise_uvrms": noise_uv, "bw_hz": bw,
@@ -712,6 +944,43 @@ quit
         f.write("corner temp gain_db noise_uvrms bw_hz pass\n")
         for r in results:
             f.write(f"{r['corner']} {r['temp']} {r['gain_db']} {r['noise_uvrms']} {r['bw_hz']} {r['pass']}\n")
+
+    # Generate PVT summary plot
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+
+        for corner in corners:
+            cr = [r for r in results if r['corner'] == corner]
+            ts = [r['temp'] for r in cr]
+            ns = [r['noise_uvrms'] for r in cr if r['noise_uvrms']]
+            gs = [r['gain_db'] for r in cr if r['gain_db']]
+            if ns:
+                ax1.plot(ts[:len(ns)], ns, 'o-', label=corner)
+            if gs:
+                ax2.plot(ts[:len(gs)], gs, 'o-', label=corner)
+
+        ax1.axhline(1.5, color='r', linestyle='--', label='Spec limit')
+        ax1.set_xlabel('Temperature (C)')
+        ax1.set_ylabel('Input-referred noise (uVrms)')
+        ax1.set_title('PVT Noise')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        ax2.axhline(34, color='r', linestyle='--', label='Spec limit')
+        ax2.set_xlabel('Temperature (C)')
+        ax2.set_ylabel('Gain (dB)')
+        ax2.set_title('PVT Gain')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        plt.tight_layout()
+        plt.savefig(f'{PLOTS_DIR}/pvt_summary.png', dpi=150)
+        print("  PVT plot saved")
+    except Exception as e:
+        print(f"  PVT plot error: {e}")
 
     return results
 

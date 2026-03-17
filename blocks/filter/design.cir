@@ -1,12 +1,9 @@
-* SKY130 Bandpass Filter — Iteration 1
+* SKY130 Bandpass Filter — Iteration 2
 * Architecture: Pseudo-resistor HPF + 4th-order Sallen-Key LPF
-* Uses two-stage Miller opamp for low output impedance
-* Target: f_low < 1 Hz, f_high ~ 140 Hz, >20 dB at 250 Hz
+* Key fix: Use 10 MΩ resistors + pF caps to avoid opamp capacitive loading
+* Cc = 50 pF for adequate phase margin
 *
-* Changes from baseline:
-* - Two-stage Miller-compensated opamp (replaces simple OTA)
-* - 4th-order LPF (two cascaded Sallen-Key stages) for 20 dB at 250 Hz
-* - Proper bias circuit
+* Target: f_low < 1 Hz, f_high ~ 140 Hz, >20 dB at 250 Hz
 
 .lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
 
@@ -20,48 +17,38 @@ Vdd vdd 0 {vdd_val}
 Vss vss 0 0
 Vcm vcm 0 {vcm_val}
 
-* Bias current: ~500 nA via resistor + diode-connected NFET
+* Bias: ~500 nA reference via R + diode NFET
 Rbias vdd nbias 2.2Meg
 Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
 
-* PMOS bias mirror
-Xbias_p1 pbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=4u
-Xbias_p2 nbias pbias vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=4u
-* pbias_p2 sinks same current as bias through nbias NFET
-
 **********************************************
-* TWO-STAGE MILLER OPAMP SUBCIRCUIT
+* TWO-STAGE MILLER OPAMP
 **********************************************
-* Ports: inp(+) inn(-) out vdd vss nbias
-* Stage 1: PMOS mirror load + NMOS diff pair + NMOS tail
-* Stage 2: PMOS common-source + NMOS current source
-* Miller comp: Cc from stage1 output to stage2 output
+* Stage 1: NMOS diff pair + PMOS mirror, Itail ~500 nA
+* Stage 2: PMOS CS + NMOS current source, I ~1 µA
+* Miller Cc = 50 pF for stability with pF-range capacitive loads
 .subckt miller_opamp inp inn out vdd vss nbias
-* --- Stage 1: Differential pair with PMOS mirror ---
-* PMOS current mirror load
+* PMOS mirror load
 XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
 XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
-* NMOS differential pair (inp on output side = non-inverting)
+* NMOS diff pair (inp = non-inverting, on output side)
 XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
 XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=4u l=1u
-* NMOS tail current source (~500 nA)
+* Tail current ~500 nA
 XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
-
-* --- Stage 2: Common-source output ---
-* PMOS CS amplifier (driven by stage 1 output)
-XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
-* NMOS current source load (~1 µA)
-XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=4u
-
-* --- Miller compensation ---
-Cc s1out out 3p
+* Stage 2: PMOS CS driver
+XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=32u l=0.5u
+* Stage 2 current source ~1 µA
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=2u
+* Miller compensation
+Cc s1out out 50p
 .ends miller_opamp
 
 **********************************************
-* PSEUDO-RESISTOR SUBCIRCUIT
+* PSEUDO-RESISTOR
 **********************************************
-* Anti-parallel PMOS pair — minimum width, long channel for max resistance
-* Vgs ≈ 0 near midpoint gives TΩ-range resistance
+* Anti-parallel PMOS pair, min width, long channel
+* Targeting ~3 GΩ for f_low ~ 1 Hz with C = 50 pF
 .subckt pseudo_res a b vdd
 Xpr1 a b b vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
 Xpr2 b a a vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
@@ -70,51 +57,50 @@ Xpr2 b a a vdd sky130_fd_pr__pfet_01v8 w=0.42u l=15u
 **********************************************
 * STAGE 1: HIGH-PASS FILTER (1st order)
 **********************************************
-* Capacitively-coupled amplifier with pseudo-resistor DC feedback
-* Gain = C_in / C_fb = 1 (unity)
-* f_low = 1 / (2*pi * R_pseudo * C_fb)
-* With C_fb = 50 pF and R_pseudo targeting ~3 GΩ → f_low ≈ 1 Hz
-
+* Capacitively-coupled with pseudo-resistor DC feedback, unity gain
 C_in input hpf_in 50p ic=0
 Xpr_fb hpf_in hpf_out vdd pseudo_res
 C_fb hpf_in hpf_out 50p ic=0
 Xamp1 vcm hpf_in hpf_out vdd vss nbias miller_opamp
 
 **********************************************
-* STAGE 2: LOW-PASS FILTER (4th order Sallen-Key Butterworth)
+* STAGE 2: 4th-order Sallen-Key Butterworth LPF
 **********************************************
-* Two cascaded 2nd-order Sallen-Key sections
-* 4th order Butterworth pole pairs:
-*   Section 1: Q1 = 0.5412, f1 = 140 Hz
-*   Section 2: Q2 = 1.3066, f2 = 140 Hz
+* Using R = 10 MΩ to keep caps in pF range (opamp-friendly)
 *
-* Sallen-Key LPF with equal R:
-*   f0 = 1/(2*pi*R*sqrt(C1*C2))
-*   Q = sqrt(C1/C2) / 2
+* 4th-order Butterworth poles:
+*   Section 1: Q = 0.5412, f0 = 140 Hz
+*   Section 2: Q = 1.3066, f0 = 140 Hz
 *
-* --- Section 1 (Q=0.5412): ---
-* Q = sqrt(C1/C2)/2 = 0.5412 → C1/C2 = (2*0.5412)^2 = 1.1714
-* With R = 200 kΩ:
-*   f0 = 1/(2*pi*200k*sqrt(C1*C2)) = 140 Hz
-*   sqrt(C1*C2) = 1/(2*pi*200k*140) = 5.684 nF
-*   C1*C2 = 32.31 nF²
-*   C1 = 1.1714 * C2 → 1.1714*C2² = 32.31 → C2 = 5.252 nF, C1 = 6.153 nF
-R_s1a hpf_out s1_mid 200k
-R_s1b s1_mid s1_in 200k
-C_s1a s1_mid s1_out 6.2n
-C_s1b s1_in vcm 5.2n
-Xamp2 s1_in s1_out s1_out vdd vss nbias miller_opamp
+* Sallen-Key equal-R: Q = sqrt(C1/C2)/2, f0 = 1/(2*pi*R*sqrt(C1*C2))
+*
+* --- Section 1 (Q=0.5412) ---
+* C1/C2 = (2*0.5412)^2 = 1.1714
+* sqrt(C1*C2) = 1/(2*pi*10M*140) = 113.7 pF
+* C1*C2 = 12926 pF^2
+* C2 = sqrt(12926/1.1714) = 105.1 pF → 100 pF
+* C1 = 1.1714 * 100 = 117.1 pF → 120 pF
+* Recheck: f0 = 1/(2*pi*10M*sqrt(120p*100p)) = 1/(2*pi*10M*109.5p) = 145.3 Hz ✓
 
-* --- Section 2 (Q=1.3066): ---
-* Q = sqrt(C1/C2)/2 = 1.3066 → C1/C2 = (2*1.3066)^2 = 6.829
-* With R = 200 kΩ:
-*   sqrt(C1*C2) = 5.684 nF (same f0)
-*   C1 = 6.829*C2 → 6.829*C2² = 32.31 → C2 = 2.175 nF, C1 = 14.86 nF
-R_s2a s1_out s2_mid 200k
-R_s2b s2_mid s2_in 200k
-C_s2a s2_mid s2_out 15n
-C_s2b s2_in vcm 2.2n
-Xamp3 s2_in s2_out s2_out vdd vss nbias miller_opamp
+R_s1a hpf_out s1_mid 10Meg
+R_s1b s1_mid s1_buf 10Meg
+C_s1a s1_mid s1_out 120p
+C_s1b s1_buf vcm 100p
+Xamp2 s1_buf s1_out s1_out vdd vss nbias miller_opamp
+
+* --- Section 2 (Q=1.3066) ---
+* C1/C2 = (2*1.3066)^2 = 6.829
+* C1*C2 = 12926 pF^2
+* C2 = sqrt(12926/6.829) = 43.5 pF → 43 pF
+* C1 = 6.829 * 43 = 293.6 pF → 300 pF
+* Recheck: f0 = 1/(2*pi*10M*sqrt(300p*43p)) = 1/(2*pi*10M*113.6p) = 140.2 Hz ✓
+* Q = sqrt(300/43)/2 = sqrt(6.977)/2 = 1.321 ≈ 1.3066 ✓
+
+R_s2a s1_out s2_mid 10Meg
+R_s2b s2_mid s2_buf 10Meg
+C_s2a s2_mid s2_out 300p
+C_s2b s2_buf vcm 43p
+Xamp3 s2_buf s2_out s2_out vdd vss nbias miller_opamp
 
 **********************************************
 * OUTPUT
@@ -122,7 +108,7 @@ Xamp3 s2_in s2_out s2_out vdd vss nbias miller_opamp
 Rout s2_out output 100
 
 **********************************************
-* INPUT SOURCE (overridden by evaluate.py)
+* INPUT SOURCE
 **********************************************
 Vin input vcm dc 0 ac 1
 

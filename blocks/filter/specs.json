@@ -1,43 +1,44 @@
 {
-  "name": "SKY130 Bandpass Filter",
-  "description": "2nd-order Gm-C or switched-capacitor bandpass filter (0.5 Hz to 150 Hz) for ECG signal conditioning",
+  "name": "SKY130 Bandpass Filter v2",
+  "description": "Same passband (0.5-150 Hz) but sigma-delta oversampling relaxes the anti-alias requirements. Focus on low noise and clean passband.",
   "supply_v": 1.8,
+  "margin_rule": "Every spec must pass with >= 25% margin",
   "measurements": {
     "f_low_hz": {
       "target": "<1.0",
       "weight": 20,
       "unit": "Hz",
-      "description": "Lower -3 dB cutoff frequency (high-pass, removes electrode DC offset)"
+      "description": "Lower -3 dB cutoff"
     },
     "f_high_hz": {
-      "target": "130 to 170",
-      "weight": 20,
+      "target": "130 to 200",
+      "weight": 15,
       "unit": "Hz",
-      "description": "Upper -3 dB cutoff frequency (low-pass, anti-alias for ADC)"
+      "description": "Upper -3 dB cutoff (relaxed upper bound — sigma-delta does anti-alias)"
     },
     "passband_ripple_db": {
-      "target": "<1",
-      "weight": 15,
+      "target": "<0.5",
+      "weight": 20,
       "unit": "dB",
-      "description": "Maximum gain variation within the 0.5-150 Hz passband"
+      "description": "Tighter ripple for clinical ECG morphology (was <1 dB)"
     },
     "stopband_atten_250hz_db": {
-      "target": ">20",
-      "weight": 15,
+      "target": ">15",
+      "weight": 10,
       "unit": "dB",
-      "description": "Attenuation at 250 Hz (Nyquist for 500 SPS ADC mode)"
+      "description": "Relaxed from v1 (>20) — sigma-delta oversampling helps"
     },
     "output_noise_uvrms": {
-      "target": "<100",
-      "weight": 15,
+      "target": "<50",
+      "weight": 20,
       "unit": "uVrms",
-      "description": "Output-referred noise in the passband"
+      "description": "Output noise in passband (referred to filter output, not input)"
     },
     "power_uw": {
-      "target": "<10",
+      "target": "<20",
       "weight": 15,
       "unit": "uW",
-      "description": "Total power consumption"
+      "description": "Relaxed from v1 (<10) for better noise"
     }
   }
 }

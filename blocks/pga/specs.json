@@ -1,49 +1,50 @@
 {
-  "name": "SKY130 Programmable Gain Amplifier",
-  "description": "Digitally-programmable gain amplifier (1x to 128x) for biosignal conditioning",
+  "name": "SKY130 Programmable Gain Amplifier v2",
+  "description": "Simplified: 1-64x in 4 steps. Sigma-delta ADC handles more dynamic range so PGA needs less.",
   "supply_v": 1.8,
+  "margin_rule": "Every spec must pass with >= 25% margin",
   "measurements": {
     "gain_settings": {
-      "target": ">=7",
+      "target": ">=4",
       "weight": 15,
       "unit": "settings",
-      "description": "Number of discrete gain steps (target: 1, 2, 4, 8, 16, 32, 64, 128)"
+      "description": "Gain steps: 1, 4, 16, 64 (binary, 4 steps)"
     },
     "gain_error_pct": {
-      "target": "<1",
+      "target": "<0.5",
       "weight": 20,
       "unit": "%",
-      "description": "Gain error at each setting (measured vs ideal ratio)"
+      "description": "Tighter gain accuracy for 20-bit signal chain"
     },
     "bandwidth_hz": {
       "target": ">10000",
       "weight": 15,
       "unit": "Hz",
-      "description": "-3 dB bandwidth at maximum gain (128x)"
+      "description": "-3 dB BW at max gain (64x)"
     },
     "output_noise_uvrms": {
-      "target": "<50",
+      "target": "<30",
       "weight": 15,
       "unit": "uVrms",
-      "description": "Output-referred noise in 0.5-150 Hz at gain=1"
+      "description": "Output noise at gain=1, 0.5-150 Hz"
     },
     "thd_pct": {
-      "target": "<0.1",
+      "target": "<0.01",
       "weight": 15,
       "unit": "%",
-      "description": "Total harmonic distortion at 10 Hz, 1 Vpp output"
+      "description": "Tighter THD for 20-bit signal chain (was <0.1%)"
     },
     "power_uw": {
-      "target": "<10",
+      "target": "<30",
       "weight": 10,
       "unit": "uW",
-      "description": "Total power consumption"
+      "description": "Relaxed from v1 (<10) for better linearity"
     },
     "settling_time_us": {
       "target": "<100",
       "weight": 10,
       "unit": "us",
-      "description": "Time to settle within 0.1% after gain change"
+      "description": "Settling after gain change"
     }
   }
 }

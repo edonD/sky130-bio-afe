@@ -1,65 +1,74 @@
 {
-  "project": "SKY130 Biomedical Analog Front-End",
-  "description": "4-channel ECG/EEG/EMG acquisition IC with integrated signal conditioning and ADC",
+  "project": "SKY130 Biomedical Analog Front-End v2",
+  "description": "4-channel clinical-grade ECG/EEG/EMG acquisition IC — targeting better-than-ADS1299 performance",
   "technology": "SkyWater SKY130 130nm CMOS",
   "supply_v": 1.8,
-  "target_application": "Wearable biosignal monitoring",
+  "version": "v2",
+  "target_application": "Clinical and wearable biosignal monitoring",
+
+  "design_philosophy": {
+    "margin_rule": "Every spec must pass with >= 25% margin. A design that barely passes is a failing design.",
+    "power_strategy": "Budget 200 uW/channel — 4.5x better than ADS1299 but enough headroom for real analog performance.",
+    "adc_strategy": "Sigma-delta ADC replaces SAR. Oversampling + noise shaping gives 20-bit resolution on 130nm.",
+    "noise_strategy": "Relax power budget to allow 50 uA bias in InAmp. Target 0.5 uVrms — beating ADS1299's 1.0 uVrms."
+  },
 
   "blocks": {
     "bandgap": {
       "path": "blocks/bandgap",
       "parallel": true,
       "depends_on": [],
-      "description": "Bandgap voltage reference and bias current generator"
+      "description": "Bandgap reference — tighter TC for 20-bit ADC"
     },
     "inamp": {
       "path": "blocks/inamp",
       "parallel": true,
       "depends_on": [],
-      "description": "Chopper-stabilized instrumentation amplifier"
+      "description": "Chopper CCIA — higher bias for sub-µV noise"
     },
     "pga": {
       "path": "blocks/pga",
       "parallel": true,
       "depends_on": [],
-      "description": "Programmable gain amplifier (1x-128x)"
+      "description": "Programmable gain 1-64x (reduced range, sigma-delta handles dynamic range)"
     },
     "filter": {
       "path": "blocks/filter",
       "parallel": true,
       "depends_on": [],
-      "description": "Bandpass filter (0.5 Hz - 150 Hz for ECG)"
+      "description": "Anti-alias filter for sigma-delta (relaxed, oversampling helps)"
     },
     "adc": {
       "path": "blocks/adc",
       "parallel": true,
       "depends_on": [],
-      "description": "12-bit SAR ADC with 1 kSPS sampling"
+      "description": "20-bit 2nd-order sigma-delta ADC — complete redesign from SAR"
     },
     "integration": {
       "path": "blocks/integration",
       "parallel": false,
       "depends_on": ["bandgap", "inamp", "pga", "filter", "adc"],
-      "description": "Full 4-channel system integration and validation"
+      "description": "Full 4-channel system — clinical ECG validation"
     }
   },
 
   "system_specs": {
-    "input_referred_noise_uvrms": {"target": "<1.0", "description": "Total input-referred noise in 0.5-150 Hz band"},
-    "cmrr_db": {"target": ">100", "description": "Common-mode rejection ratio at 50/60 Hz"},
-    "total_gain_range_db": {"target": "0 to 80", "description": "Programmable gain range"},
+    "input_referred_noise_uvrms": {"target": "<0.5", "description": "Total input-referred noise in 0.5-150 Hz band"},
+    "cmrr_db": {"target": ">110", "description": "Common-mode rejection at 50/60 Hz with real mismatch"},
+    "total_gain_range_db": {"target": "34 to 70", "description": "InAmp 34dB + PGA 0-36dB"},
     "bandwidth_hz": {"target": "0.5 to 150", "description": "Signal bandwidth (ECG mode)"},
-    "adc_resolution_bits": {"target": ">=12", "description": "ADC effective resolution"},
-    "power_per_channel_uw": {"target": "<50", "description": "Total power per acquisition channel"},
-    "supply_voltage_v": {"target": "1.8", "description": "Single supply operation"},
-    "channels": {"target": "4", "description": "Number of independent acquisition channels"}
+    "adc_resolution_bits": {"target": ">=18", "description": "Effective resolution (ENOB from sigma-delta)"},
+    "sample_rate_sps": {"target": ">=4000", "description": "Output data rate after decimation"},
+    "power_per_channel_uw": {"target": "<200", "description": "Total power per channel"},
+    "supply_voltage_v": {"target": "1.8", "description": "Single supply"},
+    "channels": {"target": "4", "description": "Independent acquisition channels"},
+    "margin_rule": {"target": ">=25%", "description": "Every spec must have >= 25% margin"}
   },
 
-  "signal_chain": [
-    "Electrode pair (differential) -> Instrumentation Amplifier (10x-100x, chopper)",
-    "-> Programmable Gain Amplifier (1x-128x)",
-    "-> Bandpass Filter (0.5 Hz - 150 Hz, 2nd order)",
-    "-> 12-bit SAR ADC (1 kSPS per channel)",
-    "-> SPI digital output"
-  ]
+  "competition": {
+    "ADS1299": {"noise": "1.0 uVrms", "cmrr": "110 dB", "adc": "24-bit", "power": "900 uW/ch", "price": "$30"},
+    "AD8233": {"noise": "10 uVrms", "cmrr": "80 dB", "adc": "none", "power": "170 uW", "price": "$5"},
+    "MAX30003": {"noise": "1.5 uVrms", "cmrr": "105 dB", "adc": "18-bit", "power": "85 uW", "price": "$4"},
+    "our_target": "Beat ADS1299 on noise and power. Match on CMRR. Trade 4 bits of ADC resolution for 4.5x lower power."
+  }
 }

@@ -1,43 +1,44 @@
 {
-  "name": "SKY130 Chopper Instrumentation Amplifier",
-  "description": "Low-noise, high-CMRR instrumentation amplifier for biosignal acquisition. First stage of the analog signal chain.",
+  "name": "SKY130 Chopper Instrumentation Amplifier v2",
+  "description": "Sub-µV noise to beat ADS1299. Power budget relaxed to 50 µW to allow proper biasing.",
   "supply_v": 1.8,
+  "margin_rule": "Every spec must pass with >= 25% margin",
   "measurements": {
     "gain_db": {
       "target": ">34",
-      "weight": 15,
+      "weight": 10,
       "unit": "dB",
-      "description": "Closed-loop voltage gain (target ~50 V/V = 34 dB nominal)"
+      "description": "Closed-loop voltage gain (~50-80 V/V)"
     },
     "input_referred_noise_uvrms": {
-      "target": "<1.5",
-      "weight": 25,
+      "target": "<0.5",
+      "weight": 30,
       "unit": "uVrms",
-      "description": "Input-referred noise integrated over 0.5 Hz to 150 Hz"
+      "description": "Total noise in 0.5-150 Hz. Target: beat ADS1299's 1.0 uVrms by 2x."
     },
     "cmrr_60hz_db": {
-      "target": ">100",
+      "target": ">110",
       "weight": 20,
       "unit": "dB",
-      "description": "Common-mode rejection ratio at 60 Hz (powerline interference)"
+      "description": "CMRR at 60 Hz WITH 0.1% Cin mismatch. Must match ADS1299."
     },
     "input_offset_uv": {
-      "target": "<50",
-      "weight": 15,
+      "target": "<10",
+      "weight": 10,
       "unit": "uV",
-      "description": "Systematic input-referred DC offset (before chopping residual)"
+      "description": "Input-referred DC offset (tighter than v1 for sigma-delta accuracy)"
     },
     "bandwidth_hz": {
       "target": ">10000",
       "weight": 10,
       "unit": "Hz",
-      "description": "-3 dB bandwidth (must pass ECG/EEG/EMG signals without attenuation)"
+      "description": "-3 dB bandwidth"
     },
     "power_uw": {
-      "target": "<15",
-      "weight": 15,
+      "target": "<50",
+      "weight": 20,
       "unit": "uW",
-      "description": "Total power consumption from 1.8V supply"
+      "description": "Relaxed from v1 (<15) — use the power for lower noise"
     }
   }
 }

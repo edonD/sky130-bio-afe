@@ -1,8 +1,0 @@
-{
-  "power_uw": 14.802138000000001,
-  "gain_db": 37.44713719153733,
-  "bandwidth_hz": 69183.0971,
-  "cmrr_60hz_db": 124.09968332226106,
-  "input_referred_noise_uvrms": 1.3934397110392516,
-  "input_offset_uv": 0.0
-}

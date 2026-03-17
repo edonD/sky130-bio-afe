@@ -1,8 +1,35 @@
-# 12-bit SAR ADC
+# 20-bit Sigma-Delta ADC
 
 ## Purpose
 
-Digitize the conditioned biosignal into 12-bit words at 1 kSPS per channel. 12-bit resolution gives 0.44 mV/LSB over 1.8V. With the front-end gain, this maps to 0.069–8.8 µV/LSB input-referred — adequate for both ECG and EEG.
+Digitize the conditioned biosignal with 20-bit effective resolution at 4 kSPS output rate. This is a complete redesign from the v1 12-bit SAR. The sigma-delta architecture uses oversampling and noise shaping to achieve resolution impossible with a SAR at this speed/power.
+
+## Why Sigma-Delta
+
+A SAR ADC achieves N bits by matching N capacitors. At 20 bits, that's 1M:1 matching — impossible. A sigma-delta instead:
+1. Samples at high rate (oversampling ratio OSR, e.g., 256× above Nyquist)
+2. Uses a 1-bit (or few-bit) quantizer — no matching needed
+3. Shapes quantization noise out of the signal band with a feedback loop
+4. A digital decimation filter removes the out-of-band noise
+
+For 20-bit ENOB with a 2nd-order modulator: OSR = 256, output rate = 4 kSPS → modulator clock = 1.024 MHz. This is trivially achievable on 130nm.
+
+## Architecture Overview
+
+```
+Vin → [Integrator 1] → [Integrator 2] → [Quantizer (1-bit)] → DOUT
+         ↑                    ↑                  |
+         └─── DAC1 ───────────└─── DAC2 ─────────┘ (feedback)
+
+Modulator output (1-bit, 1.024 MHz) → [Sinc3 Decimation Filter] → 20-bit @ 4 kSPS
+```
+
+Key components:
+- **Integrator 1**: Switched-capacitor integrator with high-gain OTA
+- **Integrator 2**: Second integrator for 2nd-order noise shaping
+- **Quantizer**: Simple comparator (1-bit = just a sign detector)
+- **DAC**: 1-bit DAC = just a switch between +Vref and -Vref
+- **Decimation filter**: Digital sinc3 filter (can be behavioral in simulation)
 
 ## Files
 
@@ -19,119 +46,146 @@ Digitize the conditioned biosignal into 12-bit words at 1 kSPS per channel. 12-b
 | `plots/` | YES | All generated plots. |
 
 **You CANNOT modify:** `specs.json`, `program.md`, SKY130 PDK model files.
+**You CANNOT modify files in other blocks.**
 
-**Critical rule:** Never game the process by editing PDK models or fabricating results. If DNL is perfect (< 0.01 LSB) without mismatch models, that's a simulation artifact, not a real result.
+**Critical rule:** Never game the process. Every number must come from actual simulation.
 
 ## Evaluated Parameters
 
 | Parameter | Target | Weight | What It Means |
 |-----------|--------|--------|---------------|
-| `enob` | > 10 bits | 25 | Effective number of bits (from SINAD) |
-| `dnl_lsb` | < 1.0 LSB | 20 | Worst-case differential nonlinearity (no missing codes) |
-| `inl_lsb` | < 2.0 LSB | 15 | Worst-case integral nonlinearity |
-| `conversion_time_us` | < 500 µs | 10 | Time for one 12-bit conversion |
-| `power_uw` | < 10 µW | 15 | Power at 1 kSPS |
-| `input_range_v` | > 1.5 V | 15 | Usable analog input range |
+| `enob` | > 18 bits | 30 | Effective number of bits from SINAD |
+| `snr_db` | > 110 dB | 20 | Signal-to-noise ratio |
+| `thd_db` | < -100 dB | 15 | Total harmonic distortion |
+| `output_data_rate_sps` | > 4000 SPS | 10 | Decimated output rate |
+| `power_uw` | < 100 µW | 15 | Total power |
+| `input_range_v` | > 1.2 V | 10 | Differential input range |
+
+**Margin rule:** Every spec must pass with >= 25% margin. A design at exactly 18.0 ENOB is a fail.
+
+## Knowledge for the Design
+
+### Sigma-Delta Fundamentals
+
+For a 2nd-order modulator with OSR = 256:
+- Theoretical SNR = 6.02×N + 1.76 + 30×log10(OSR) - 12.9 where N=1 bit
+- SNR ≈ 6.02 + 1.76 + 30×2.408 - 12.9 ≈ 67 dB from quantization noise shaping alone
+- Wait — that's only 11 bits. You need higher OSR or higher order.
+
+Better formula for Lth-order, 1-bit, OSR:
+- SNR ≈ 6.02 + 1.76 + (2L+1)×10×log10(OSR) − 10×log10(π^(2L) / (2L+1))
+- For L=2, OSR=256: SNR ≈ 6.02 + 1.76 + 50×2.408 − 10×log10(π^4/5) ≈ 6.02+1.76+120.4-12.9 = 115 dB ≈ 18.8 bits
+
+So 2nd-order, OSR=256 gives ~19 ENOB theoretically. To hit 20 ENOB you need either:
+- OSR = 512 (doubles clock to 2 MHz — still fine for 130nm)
+- 3rd-order modulator (more complex, stability concerns)
+- Multi-bit quantizer (3-5 bits internal, needs DAC matching)
+
+The agent can choose the tradeoff.
+
+### Critical Design Challenges
+
+1. **OTA gain and settling**: The integrator OTA needs >60 dB gain and must settle within half a clock cycle (~500 ns at 1 MHz). This is easy for 130nm.
+
+2. **Capacitor noise**: kT/C noise on the sampling capacitor sets the noise floor. For SNR = 115 dB with 1.8V range: C_sample > kT/(V_range^2 × 10^(-SNR/10)) ≈ 4e-21 / (3.24 × 3e-12) ≈ 0.4 pF. Use 2-5 pF for margin.
+
+3. **Modulator stability**: 2nd-order is unconditionally stable with proper coefficient scaling. 3rd-order needs careful design (clipping, reset logic).
+
+4. **Decimation filter**: A sinc3 filter is standard. Can be implemented in Python (behavioral) for evaluation purposes — the modulator bitstream is what matters in SPICE.
+
+5. **Clock generation**: Need a 1-2 MHz clock with non-overlapping phases for switched-capacitor operation. Can use an on-chip ring oscillator or external clock.
+
+### Skip These Dead Ends
+
+- Flash ADC sub-quantizer — overkill for 1-bit, adds complexity
+- Continuous-time sigma-delta — elegant but harder to simulate in ngspice (no switched-cap equivalences)
+- 4th+ order modulators — stability issues not worth the marginal OSR reduction
 
 ## Testbenches
 
-### TB1: Static Linearity (DNL/INL)
-- Ramp or histogram test: slow ramp across full input range, collect all 4096 codes.
-- Compute DNL and INL for every code.
-- **Pass:** DNL < 1.0 LSB (no missing codes), INL < 2.0 LSB.
-- **Plot:** `plots/dnl_inl.png` (DNL and INL vs code — full 4096 codes, not a subset)
+### TB1: Modulator Output (Bitstream)
+- Apply DC input at mid-scale. Run modulator for 4096 clock cycles.
+- The bitstream density should be ~50% (equal ones and zeros).
+- Apply DC at 3/4 scale — bitstream density should be ~75%.
+- **Pass:** Bitstream density tracks input voltage linearly.
+- **Plot:** `plots/bitstream.png`
 
-### TB2: Dynamic Performance (ENOB)
-- Sinusoidal input near Nyquist/4 (~125 Hz). 4096-point FFT of output codes.
-- Compute SINAD, ENOB, SFDR, THD.
-- **Pass:** ENOB > 10 bits.
-- **Plot:** `plots/fft_spectrum.png` (output spectrum with ENOB, SFDR annotated)
+### TB2: SNR and ENOB (THE KEY TEST)
+- Apply sinusoidal input near signal-band edge (~100 Hz for 4 kSPS output).
+- Run for enough cycles to get 8192+ output samples after decimation.
+- FFT of decimated output. Compute SNR, SINAD, ENOB.
+- **Pass:** ENOB > 18 bits (with 25% margin → target 22.5+ ENOB, but 18 is the hard floor).
+- **Plot:** `plots/fft_spectrum.png` (output spectrum showing noise shaping — should see noise rising at higher frequencies)
 
-### TB3: Conversion Timing
-- Measure total time from sample to valid digital output.
-- **Pass:** < 500 µs.
-- **Plot:** `plots/conversion_timing.png` (show comparator decisions, SAR logic, bit-by-bit approximation)
+### TB3: THD
+- Full-scale sine input. Measure harmonics in FFT.
+- **Pass:** THD < -100 dB.
+- **Plot:** Same as TB2, annotate harmonics.
 
-### TB4: Power
-- Average supply current at 1 kSPS.
-- **Pass:** < 10 µW.
-- **Plot:** `plots/power_vs_sample_rate.png`
+### TB4: Noise Floor
+- Short input (0V differential). Run and decimate.
+- The output code spread gives the noise floor.
+- **Pass:** RMS noise < 1 LSB at 20-bit (< 1.7 µV for 1.8V range).
+- **Plot:** `plots/noise_floor.png`
 
-### TB5: Transfer Function
-- DC sweep 0V to 1.8V. Plot output code vs input voltage.
-- **Pass:** Usable range > 1.5V, monotonic.
+### TB5: Transfer Function (Linearity)
+- Slow ramp input, decimate output codes.
+- **Pass:** Monotonic, no missing codes, INL < 5 LSB at 20-bit.
 - **Plot:** `plots/transfer_function.png`
 
-### TB6: Noise Floor
-- DC input at mid-scale, collect 1000 samples. Compute RMS code noise.
-- **Pass:** < 1.5 LSB rms.
-- **Plot:** `plots/noise_histogram.png`
+### TB6: Power
+- Measure average supply current during active conversion.
+- **Pass:** < 100 µW total.
+- **Plot:** `plots/power_breakdown.png`
 
-### TB7: PVT + Monte Carlo
-- DNL/INL across 5 corners × 3 temps. DNL < 1.5 LSB at all corners.
-- 200 MC samples: report ENOB spread.
-- **Plots:** `plots/pvt_linearity.png`, `plots/monte_carlo.png`
+### TB7: PVT
+- TB2 across 5 corners × 3 temps.
+- **Pass:** ENOB > 16 at all corners (relaxed for PVT).
+- **Plot:** `plots/pvt_enob.png`
 
 ## How to Evaluate Honestly
 
-- **DNL/INL must cover the FULL 4096 codes.** Measuring 100 codes and extrapolating is not valid.
-- **ENOB from FFT requires coherent sampling.** Choose input frequency so an integer number of cycles fits in the FFT window, or use windowing.
-- **At 12 bits, capacitor mismatch dominates.** If DNL is suspiciously perfect (< 0.01 LSB), mismatch is probably not being modeled. Document this.
-- **At 1 kSPS, conversion time should be << 1 ms.** An async SAR with 12 bits at ~50 ns/bit = 600 ns total. There's massive timing margin — don't over-design for speed.
-- **Power at 1 kSPS should be very low.** If > 50 µW, the comparator is burning static current or the clock is pointlessly fast.
-- **Check that V_REF is stable during conversion** (charge sharing between DAC capacitors and reference can cause V_REF droop).
-- **The SAR approximation waveform should show clean bit-by-bit convergence.** If bits are flipping back and forth, the comparator is too slow or the DAC isn't settling.
+- **ENOB must come from a proper FFT** of the decimated output, not from DC noise. Use coherent sampling or windowing.
+- **The decimation filter matters.** A sinc3 at OSR=256 has specific passband droop and stopband rejection. Implement it correctly (not just averaging).
+- **Modulator simulation is long.** For 4 kSPS with OSR=256, you need 256 clock cycles per output sample, and 8192+ samples for a good FFT. That's 2M clock cycles. At 1 MHz clock = 2 seconds of simulation time. With 0.1 ns timestep = 20 billion points. **Use behavioral elements where possible** — the OTA can be a VCVS with finite gain and bandwidth, the comparator can be ideal. Only use full transistor-level for the critical path.
+- **If ENOB > 20, be suspicious.** That means < -120 dB noise floor. Verify the simulation has enough points and the FFT is windowed correctly.
+- **Switched-cap common-mode issues**: Each integrator output must stay within the OTA's linear range. If it rails, the modulator is overloaded.
 
 ## Design Freedom
 
-Choose: binary-weighted cap DAC, split-cap, C-2C, segmented. StrongARM comparator, double-tail, any other. Synchronous or asynchronous SAR logic. Any optimization method. The JKU open-source 12-bit SAR (SKY130_SAR-ADC1) exists as reference but you can design from scratch.
+Choose everything:
+- **Modulator order:** 2nd (safe) or 3rd (more resolution per OSR)
+- **Quantizer bits:** 1-bit (simplest, no DAC matching) or multi-bit (more resolution but needs DEM or calibration)
+- **OSR:** 128, 256, or 512
+- **OTA topology:** Telescopic, folded cascode, two-stage
+- **Implementation:** Full transistor-level or behavioral modulator + transistor-level critical blocks
+- **Decimation:** Python-based sinc3 filter is fine for evaluation
+- `pip install` anything
+
+Research: search for "sigma-delta ADC SKY130", "2nd order sigma-delta modulator CMOS", "switched-capacitor integrator design". Murmann's ADC survey is a good reference for state-of-the-art FOM.
 
 ## README.md — Your Final Deliverable
 
-Must contain: status, spec table, all plots with analysis, circuit description (comparator topology, DAC architecture, SAR logic), rationale, tried/rejected, limitations (especially mismatch sensitivity), experiment history.
+Must contain: status, spec table, ALL testbench plots, modulator architecture, OTA design, noise budget, coefficient selection rationale, decimation filter design, comparison to Murmann ADC survey FOM, known limitations, experiment history.
 
 ## The Experiment Loop
 
 LOOP FOREVER:
 
-1. **Think.** Is DNL clean across all 4096 codes? Does the FFT show clean ENOB? Are there missing codes?
-2. **Modify.** Change `design.cir`, `parameters.csv`, or `evaluate.py`.
+1. **Think.** Is the modulator stable? Does the bitstream look right? What does the FFT show?
+2. **Modify.** Change `design.cir`, `evaluate.py`, or optimization scripts. ONLY this block.
 3. **Commit.** `git add -A && git commit -m 'adc: <what you changed>'`
 4. **Run.** `python evaluate.py > run.log 2>&1`
-5. **Read results.** `grep "score\|PASS\|FAIL\|Error" run.log | head -20`
-6. **Study the plots.** See "Plot Analysis" below. Mandatory before keep/discard.
+5. **Read results.** `grep "score\|PASS\|FAIL\|ENOB\|SNR" run.log | head -20`
+6. **Study the plots.** Does the FFT show noise shaping (rising noise at high freq)? Is the bitstream density tracking the input?
 7. **Log.** Append to `results.tsv`.
-8. **Keep or discard.**
-   - Score improved AND DNL/INL plot is clean across ALL codes AND SAR waveform shows proper convergence → **keep**. Update README. Push.
-   - Score improved BUT DNL is suspiciously perfect (< 0.001 LSB everywhere) → **investigate**. Mismatch is probably not modeled.
-   - Score equal or worse → `git reset --hard HEAD~1`.
-9. **Repeat.** Never stop.
-
-Phase B after score=1.0: PVT (TB7), Monte Carlo for cap mismatch, noise floor measurement, ENOB across input range. Keep looping.
-
-## Logging
-
-`results.tsv` — tab-separated, NOT committed:
-
-```
-step	commit	score	specs_met	description
-0	a1b2c3d	0.00	0/6	initial SAR — ngspice convergence error in comparator
-1	b2c3d4e	0.40	2/6	StrongARM latch works — DNL 3.2 LSB (cap sizing wrong)
-2	c3d4e5f	0.65	4/6	doubled unit cap to 2fF — DNL 0.8 LSB
-3	d4e5f6g	0.85	5/6	ENOB 9.5 (need >10) — comparator offset limiting
-4	e5f6g7h	1.00	6/6	added pre-amp stage — ENOB 10.3. All pass.
-```
+8. **Keep or discard.** Score improved AND noise shaping visible in FFT → keep. Otherwise investigate or revert.
+9. **Repeat.** Never stop. Never touch other blocks.
 
 ## Plot Analysis
 
-**`plots/dnl_inl.png`** — Two subplots showing DNL and INL vs all 4096 codes. DNL should be a noisy band between -0.5 and +0.5 LSB for a well-matched DAC. If there are periodic spikes (e.g., every 256 codes), it's a major bit transition error — the MSB capacitor is mismatched. If DNL reaches +1.0, you have a missing code at that transition. INL should be a smooth bow, typically < 2 LSB peak-to-peak. If INL is a random walk, the cap matching is poor.
+**`plots/fft_spectrum.png`** — THE critical plot. Must show the 2nd-order noise shaping: flat noise floor in-band, then rising at +40 dB/decade out of band. The signal peak should be clean. Harmonics should be > 100 dB below signal. If the noise floor is flat (no shaping), the feedback loop isn't working.
 
-**`plots/fft_spectrum.png`** — Output spectrum from a near-Nyquist sine test. The fundamental should be a clean peak. The noise floor should be flat (no spurs). Harmonics (2nd, 3rd) determine THD. SFDR = distance from fundamental to largest spur. ENOB = (SINAD - 1.76) / 6.02. If there are large spurs at non-harmonic frequencies, the SAR logic or clock is leaking.
+**`plots/bitstream.png`** — Modulator output for DC inputs. Should show pulse-density modulation — more 1s for higher input. If all 1s or all 0s, the modulator is overloaded. If random noise with no density change, the input isn't being sampled.
 
-**`plots/transfer_function.png`** — Output code vs input voltage, full 0–1.8V sweep. Should be a clean staircase. If there's a discontinuity or flat region, there's a missing code. If the curve saturates before 1.8V, the input range is limited. The staircase should be monotonic — code never decreases as input increases.
-
-**`plots/conversion_timing.png`** — Show the SAR approximation for one conversion: comparator output, DAC voltage, bit decisions. Each bit should cleanly resolve before the next comparison starts. If bits are flipping back-and-forth, the comparator is too slow or the DAC hasn't settled. The total conversion should finish well within 500 µs.
-
-**`plots/noise_histogram.png`** — Histogram of 1000 samples at a fixed DC input. Should be a tight Gaussian centered on the expected code. Width = RMS noise in LSBs. If it's bimodal (two peaks), the input is right at a code transition. If the spread is > 2 LSB, the noise floor is too high.
-
-**System-level check:** "This ADC receives a signal from the filter, centered at ~0.9V with amplitude set by the gain chain. A 1 mV ECG at 400x total gain = 400 mV, so the ADC sees 0.7V to 1.1V — well within the 0–1.8V range. At 0.44 mV/LSB, that's ~900 codes of dynamic range. ENOB > 10 means the quantization noise won't limit the system." Document in README.
+**System-level check:** "With 20-bit resolution over 1.8V range, 1 LSB = 1.7 µV. The InAmp output noise is ~0.5 µVrms × gain = ~40 µV at the ADC input. That's ~24 LSBs of noise — the ADC resolution is not wasted, but also not the bottleneck. The system noise is dominated by the analog front-end, not the ADC quantization. This is the correct design balance."

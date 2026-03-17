@@ -25,12 +25,12 @@ Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input dif
 | Parameter | Measured | Target | Margin | Status |
 |-----------|----------|--------|--------|--------|
 | Gain settings | 8 (all pass) | >= 7 | +1 | PASS |
-| Gain error | 0.65% (worst, G=128) | < 1% | 35% | PASS |
+| Gain error | 0.71% (worst, G=128) | < 1% | 29% | PASS |
 | Bandwidth (G=128) | 14.8 kHz | > 10 kHz | 48% | PASS |
 | Output noise (G=1) | 25.8 µVrms | < 50 µVrms | 48% | PASS |
 | THD (10 Hz, 1 Vpp) | 0.0017% (hi-fi) | < 0.1% | 98% | PASS |
-| Power | 9.3 µW | < 10 µW | 7% | PASS |
-| Settling time | 78.2 µs | < 100 µs | 22% | PASS |
+| Power | 8.1 µW | < 10 µW | 19% | PASS |
+| Settling time | 78 µs | < 100 µs | 22% | PASS |
 
 ## Gain Error at Each Setting
 
@@ -166,5 +166,7 @@ At gain=128: PSRR = -24.7 dB (DC through 60 Hz). This is limited by the ideal cu
 | 6 | 0.90 | 6/7 | Rf=8M, L=8u diff pair (settling fail) |
 | 7 | 1.00 | 7/7 | W=8u L=4u diff pair, Rf=10M, Cc=1.6pF |
 | 8 | 1.00 | 7/7 | Wider 2nd stage (W=16u) → 0.65% err, 0.021% THD, PVT all pass |
-| 9 | 1.00 | 7/7 | 0.9uA bias → 8.8uW power (12% margin), PVT all pass, all margins healthy |
-| 10 | 1.00 | 7/7 | Phase B complete: PVT, output swing, THD sweep, Zout, EEG signal verified |
+| 9 | 1.00 | 7/7 | 0.9uA bias → 8.8uW power (12% margin), PVT all pass |
+| 10 | 1.00 | 7/7 | Phase B: PVT, output swing, THD sweep, Zout, EEG signal verified |
+| 11 | 1.00 | 7/7 | 0.95uA bias, THD 0.0017% hi-fi measurement |
+| 12 | 1.00 | 7/7 | M6 W=12u → power 8.1uW (19% margin), PVT worst 0.92% |

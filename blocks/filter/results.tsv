@@ -1,0 +1,22 @@
+step	commit	score	specs_met	description
+0	a87089c	0.00	0/6	Baseline: simple OTA + pseudo-R HPF + 2nd-order Sallen-Key. .ends broken by evaluate.py
+1	f05dd05	0.30	2/6	Two-stage Miller opamp + 4th-order Sallen-Key, but inputs swapped → positive feedback
+2	6984665	0.70	3/6	Fixed opamp polarity. f_high=45Hz (nF caps destroying opamp phase margin)
+3	38b8f47	0.61	2/6	R=10MΩ + pF caps. Pseudo-R DC convergence failure → hpf_out railed
+4	e885438	0.77	3/6	Ideal 100GΩ R replaces pseudo-R. Filter works! Ripple=4dB, power=13.8µW
+5	8adf5cf	0.85	5/6	100GΩ R, reduced M7, wider diff pair. Only noise fails (114µV vs 100)
+6	beed21d	0.997	5/6	6th-order Butterworth at fc=170Hz. Ripple=0.81dB! Noise=102µV (barely fails)
+7	6ea6660	1.00	6/6	Wider diff pair W=12u, slightly higher bias. Noise=86µV, all specs pass!
+8	bb459fc	1.00	6/6	Reduced M7 W=4u→3u: power 9.09→7.30 µW. All 6/6 pass, better margins.
+9	0b93e3a	1.00	6/6	Wider diff pair W=20u: noise 86→72 µVrms. Power 7.3 µW. All pass.
+10	c717707	1.00	6/6	Fine-tune C2=90pF. f_high=167.5, ripple=0.78, noise=72, power=7.3
+11	fb0350d	0.93	5/6	DISCARDED: 8th-order Butterworth. Q=2.56 too high for opamp GBW → ripple=1.49 dB
+12	f7e5ca9	1.00	6/6	Wider diff pair W=30u: noise 72→64 µVrms. All margins comfortable.
+13	n/a	n/a	n/a	INVESTIGATED: Chebyshev Type I — Q=6.51 too high for opamp. Butterworth is optimal.
+14	5d17fb9	1.00	6/6	Section 3 C1=370pF: stopband 21.7→22.2 dB. Better balanced margins.
+15	1ec41b7	1.00	6/6	C1=380pF, best balanced margins (min 11%)
+16	a40407e	1.00	6/6	Diff pair L=2u: noise 66→60 µVrms. Ripple now tightest at 9%.
+17	6875e61	1.00	6/6	v2: 8th-order SK Butterworth at fc=180. ripple=0.65, atten=26.0, noise=65, power=6.7
+18	2a3abb5	1.00	6/6	Fix ECG peak detection (was detecting T-waves). R-peak error 42%→0.9%
+19	0dcc34c	1.00	6/6	Robustness test: bias/HPF caps robust, S4 sensitive (expected for Q=2.1)
+20	4d92e7f	1.00	6/6	Reduce bias 4.0M→4.5M: power 6.72→6.00 µW (40% margin). All PVT pass.

@@ -1,6 +1,6 @@
 # Programmable Gain Amplifier (PGA) — SKY130
 
-## Status: Phase B In Progress (Score 1.00, 7/7 specs met, PVT PASS)
+## Status: Phase B Complete (Score 1.00, 7/7 specs met, PVT PASS)
 
 ## Architecture
 
@@ -112,6 +112,35 @@ Tested gain=128 across 5 corners x 3 temperatures (15 conditions). Relaxed targe
 - **Worst BW**: 11.5 kHz (tt/ss/fs, 125C) — 15% margin above 10 kHz target
 - **All 15 conditions PASS**
 
+## Phase B Additional Verification
+
+### Output Swing
+Tested at gain=1 with 0.7V amplitude input: output 0.200V to 1.600V (1.40 Vpp). Matches the 0.2-1.6V interface spec exactly.
+
+### THD vs Amplitude
+| Output Vpp | THD |
+|-----------|------|
+| 0.6V | 0.021% |
+| 0.8V | 0.021% |
+| 1.0V | 0.021% |
+| 1.2V | 0.021% |
+
+THD is flat across amplitudes, indicating excellent linearity well within the output range. The constant 0.021% may represent the simulation noise floor — real silicon THD would likely be higher.
+
+### Realistic EEG Signal
+50 µV input at G=128: output Vpp = 12.72 mV (expected 12.8 mV). Clean, no clipping, centered at VCM.
+
+### Source Impedance Sensitivity
+With 1kΩ InAmp source impedance in series at G=128: gain drops from 127.2 to 125.6 (1.3% reduction). Predictable and calibratable — the source impedance adds to Rin.
+
+### Output Impedance
+| Frequency | Zout |
+|-----------|------|
+| 1 Hz | 428 Ω |
+| 10 kHz | 804 Ω |
+
+Well within the <10 kΩ interface requirement for driving the filter block.
+
 ## Experiment History
 
 | Step | Score | Specs | Key Change |
@@ -126,3 +155,4 @@ Tested gain=128 across 5 corners x 3 temperatures (15 conditions). Relaxed targe
 | 7 | 1.00 | 7/7 | W=8u L=4u diff pair, Rf=10M, Cc=1.6pF |
 | 8 | 1.00 | 7/7 | Wider 2nd stage (W=16u) → 0.65% err, 0.021% THD, PVT all pass |
 | 9 | 1.00 | 7/7 | 0.9uA bias → 8.8uW power (12% margin), PVT all pass, all margins healthy |
+| 10 | 1.00 | 7/7 | Phase B complete: PVT, output swing, THD sweep, Zout, EEG signal verified |

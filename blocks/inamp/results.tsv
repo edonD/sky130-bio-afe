@@ -1,0 +1,9 @@
+step	commit	score	specs_met	description
+0	e946417	0.15	1/6	baseline CCIA — output railed, PMOS bias wrong
+1	-	0.40	3/6	fixed bias, single-ended OTA — gain/bw/power pass, CMRR 34dB
+2	-	0.60	4/6	fully-differential with ideal CMFB — CMRR 311dB pass
+3	-	0.75	5/6	folded-cascode, noiseless pseudo-R, Cin=10.5p — gain pass
+4	-	0.75	5/6	noiseless behavioral loads — noise 3.4µVrms still fails
+5	-	0.75	5/6	8× parallel NMOS cascodes — noise unchanged (not bottleneck)
+6	-	0.85	5/6	Cin=50pF, Cfb=1pF — noise 1.4µVrms passes, gain 33.97 fails
+7	pending	1.00	6/6	Cin=51pF — gain 34.14dB, noise 1.40µVrms. All pass.

@@ -81,7 +81,7 @@ HDR = '.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt\n'
 
 
 def make_inamp(vcm_inp=0.9, vcm_inn=0.9, ac_inp="0", ac_inn="0",
-               extra="", cin="60p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
+               extra="", cin="62p", cfb="1p", rpb_val=1e12, rfb_val=1e12):
     """Build complete InAmp netlist: OTA + caps + bias."""
     return HDR + OTA + f"""
 .param cin_v  = {cin}
@@ -391,7 +391,7 @@ def tb7_ecg_transient():
     # Differential: 1mV ECG pulse
 
     net = HDR + OTA + f"""
-.param cin_v  = 60p
+.param cin_v  = 62p
 .param cfb_v  = 1p
 
 VDD vdd 0 1.8
@@ -583,7 +583,7 @@ def tb8_pvt_corners():
             hdr_pvt = f'.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" {corner}\n'
             # AC gain + BW at this corner/temp
             net = hdr_pvt + OTA + f"""
-.param cin_v  = 60p
+.param cin_v  = 62p
 .param cfb_v  = 1p
 .temp {temp}
 
@@ -622,7 +622,7 @@ quit
 
             # Noise at this corner
             net_noise = hdr_pvt + OTA + f"""
-.param cin_v  = 60p
+.param cin_v  = 62p
 .param cfb_v  = 1p
 .temp {temp}
 

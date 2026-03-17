@@ -90,9 +90,11 @@ XQ2 vss vss eb vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
 Cvref vref vss {p_cap}
 * Weak startup: ensures V_REF > 0 at power-up so op-amp can function
 * Also helps convergence during DC sweeps
-* Startup: weak pull toward ~1.2V target via voltage divider
-Rstart1 vdd vref 3e6
-Rstart2 vref vss 9e6
+* Startup: stronger pull toward ~1.35V target via voltage divider
+* At V_REF=1.2V: I_start1=(1.8-1.2)/1M = 0.6µA up, I_start2=1.2/3M = 0.4µA down
+* Net: 0.2µA into V_REF (helps cold-temperature startup)
+Rstart1 vdd vref 1e6
+Rstart2 vref vss 3e6
 
 * === Op-Amp (NFET diff pair, PMOS load) ===
 * + = node_a (Vbe1 ≈ 0.69V), - = node_b (I*Rptat + Vbe2 ≈ 0.69V)

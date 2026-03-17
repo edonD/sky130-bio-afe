@@ -168,12 +168,25 @@ quit
         print(f"  ngspice output: {out[-500:]}")
         return {"tc_ppm_c": 9999, "vref_min_temp": None, "vref_max_temp": None}
 
-    temp, vref = cols[0], cols[1]
+    temp_raw, vref_raw = cols[0], cols[1]
 
-    if len(vref) < 10:
+    if len(vref_raw) < 10:
         print("  ERROR: Temperature sweep produced insufficient data points")
         return {"tc_ppm_c": 9999, "vref_min_temp": None, "vref_max_temp": None}
 
+    # Sort by temperature (ascending) regardless of sweep direction
+    sort_idx = np.argsort(temp_raw)
+    temp = temp_raw[sort_idx]
+    vref = vref_raw[sort_idx]
+
+    # Filter convergence failures (V_REF clearly not in bandgap state)
+    valid = (vref > 0.9) & (vref < 1.5)
+    n_valid = np.sum(valid)
+    n_total = len(vref)
+    if n_valid < n_total:
+        print(f"  WARNING: {n_total - n_valid}/{n_total} points failed convergence")
+
+    # Use ALL points for TC calculation (convergence failures = real failures)
     vref_nom = vref[np.argmin(np.abs(temp - 27))]
     vref_min = np.min(vref)
     vref_max = np.max(vref)
@@ -183,6 +196,15 @@ quit
         tc_ppm = (vref_max - vref_min) / (vref_nom * delta_t) * 1e6
     else:
         tc_ppm = 9999
+
+    # Also compute TC from valid points only (for diagnostics)
+    if n_valid >= 10:
+        v_valid = vref[valid]
+        t_valid = temp[valid]
+        v_nom_v = v_valid[np.argmin(np.abs(t_valid - 27))]
+        dt_valid = t_valid[-1] - t_valid[0]
+        tc_valid = (np.max(v_valid) - np.min(v_valid)) / (v_nom_v * dt_valid) * 1e6 if dt_valid > 0 else 9999
+        print(f"  TC (valid points only, {t_valid[0]:.0f}-{t_valid[-1]:.0f}C) = {tc_valid:.1f} ppm/C")
 
     print(f"  V_REF(27C) = {vref_nom:.6f} V")
     print(f"  V_REF_min  = {vref_min:.6f} V (at T={temp[np.argmin(vref)]:.0f}C)")

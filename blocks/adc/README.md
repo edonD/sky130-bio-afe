@@ -178,10 +178,11 @@ Robust across full ±10% supply range.
 1. **Comparator VCM-dependent offset**: SPICE characterization reveals large
    comparator offsets at extreme common-mode voltages:
    - VCM 0.5-1.1V: offset < 20 µV (usable)
-   - VCM < 0.4V or > 1.2V: offset 2-5 mV (10 missing codes)
-   In the biosignal application (0.7-1.1V), this is not a problem. But the
-   full 0-1.8V range has reduced linearity at extremes. A pre-amplifier or
-   complementary input pair would fix this.
+   - VCM < 0.4V or > 1.2V: offset 2-5 mV
+   However, the charge-redistribution architecture naturally keeps the
+   comparator input near VCM=0.9V during all bit decisions. The top plate
+   voltage only swings by ±residual/2, so VCM stays in the good range.
+   Result: **zero missing codes** across the full input range with corrected model.
 
 2. **No SPICE-level DAC simulation**: The charge redistribution is modeled
    analytically in Python. This misses charge injection from switches, clock

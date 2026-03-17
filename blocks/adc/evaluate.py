@@ -480,9 +480,15 @@ _VCM_OFFSET_TABLE = np.array([
 ])
 
 def comp_offset_at_vcm(v_in, v_dac):
-    """Get comparator offset as a function of input common-mode voltage."""
-    vcm = (v_in + v_dac) / 2.0
-    return np.interp(vcm, _VCM_OFFSET_TABLE[:, 0], _VCM_OFFSET_TABLE[:, 1])
+    """Get comparator offset for charge-redistribution SAR.
+    In charge redistribution, the comparator top plate stays near VCM=0.9V.
+    The max excursion is ±VREF/4 during the MSB trial.
+    VCM_comp ≈ VCM + (v_in - v_dac) * 0.5, clamped to [0, VDD]."""
+    vcm_nom = 0.9  # Top plate biased at VCM during sampling
+    # Top plate voltage: VCM + residual/2 (attenuated by capacitor divider)
+    residual = (v_in - v_dac) * 0.5
+    vcm_comp = np.clip(vcm_nom + residual, 0, VDD)
+    return np.interp(vcm_comp, _VCM_OFFSET_TABLE[:, 0], _VCM_OFFSET_TABLE[:, 1])
 
 
 def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,

@@ -37,8 +37,11 @@ OTA = r"""
 .param ifold  = 0.5u
 .param iload  = 3u
 
-* PMOS tail current source (ideal — real implementation is shared with bandgap block)
-Itail vdd tail {itail}
+* PMOS tail current mirror (real, 10:1 ratio to save power)
+* Reference: 0.5µA, mirror: 5µA (W ratio 10:1)
+Ibias_ref ptbias vss {itail/10}
+Xpt_ref ptbias ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=7u l=4u
+Xpt_tail tail ptbias vdd vdd sky130_fd_pr__pfet_01v8 w=70u l=4u
 
 * PMOS input differential pair — 8 parallel (effective WL=6336µm²)
 Xm1a fd1 inn tail vdd sky130_fd_pr__pfet_01v8_lvt w={wp_in} l={lp_in}

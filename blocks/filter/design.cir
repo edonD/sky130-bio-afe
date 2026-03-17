@@ -1,0 +1,95 @@
+* SKY130 Bandpass Filter — v2 Iteration 20
+* Architecture: HPF (1st order, 100GΩ) + 8th-order Sallen-Key LPF
+*
+* All sections at fc=178 Hz. Section 4 Q_des=2.10.
+* 5 opamps total. Cc=50p for sections 1-4, Cc=100p for section 4 opamp.
+
+.lib "/home/ubuntu/workspace/sky130_models/sky130.lib.spice" tt
+
+.param vdd_val = 1.8
+.param vcm_val = 0.9
+
+**********************************************
+* SUPPLY AND BIAS
+**********************************************
+Vdd vdd 0 {vdd_val}
+Vss vss 0 0
+Vcm vcm 0 {vcm_val}
+
+* Bias: ~280 nA reference
+Rbias vdd nbias 4.0Meg
+Xbias_n nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
+
+**********************************************
+* TWO-STAGE MILLER OPAMP (low-power)
+**********************************************
+.subckt miller_opamp inp inn out vdd vss nbias params: cc_val=50p
+XM3 s1out s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
+XM4 s1mir s1mir vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=2u
+XM1 s1out inp tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
+XM2 s1mir inn tail1 vss sky130_fd_pr__nfet_01v8 w=30u l=2u
+XM5 tail1 nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u
+XM6 out s1out vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=0.5u
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=2.5u l=4u
+Cc s1out out {cc_val}
+.ends miller_opamp
+
+**********************************************
+* DC FEEDBACK RESISTOR
+**********************************************
+.subckt pseudo_res a b vdd
+Rpr a b 100G
+.ends pseudo_res
+
+**********************************************
+* STAGE 1: HIGH-PASS FILTER (1st order)
+**********************************************
+C_in input hpf_in 50p ic=0
+Xpr_fb hpf_in hpf_out vdd pseudo_res
+C_fb hpf_in hpf_out 50p ic=0
+Xamp1 vcm hpf_in hpf_out vdd vss nbias miller_opamp cc_val=50p
+
+**********************************************
+* STAGE 2: 8th-order Sallen-Key Butterworth LPF at fc=178 Hz
+**********************************************
+* R = 10 MΩ, k = 89.4 pF
+
+* --- Section 1 (Q=0.5098) ---
+R_s1a hpf_out s1_mid 10Meg
+R_s1b s1_mid s1_buf 10Meg
+C_s1a s1_mid s1_out 90p
+C_s1b s1_buf vcm 87p
+Xamp2 s1_buf s1_out s1_out vdd vss nbias miller_opamp cc_val=50p
+
+* --- Section 2 (Q=0.6013) ---
+R_s2a s1_out s2_mid 10Meg
+R_s2b s2_mid s2_buf 10Meg
+C_s2a s2_mid s2_out 107p
+C_s2b s2_buf vcm 73p
+Xamp3 s2_buf s2_out s2_out vdd vss nbias miller_opamp cc_val=50p
+
+* --- Section 3 (Q=0.9000) ---
+R_s3a s2_out s3_mid 10Meg
+R_s3b s3_mid s3_buf 10Meg
+C_s3a s3_mid s3_out 159p
+C_s3b s3_buf vcm 49p
+Xamp4 s3_buf s3_out s3_out vdd vss nbias miller_opamp cc_val=50p
+
+* --- Section 4 (Q_des=2.10) ---
+R_s4a s3_out s4_mid 10Meg
+R_s4b s4_mid s4_buf 10Meg
+C_s4a s4_mid s4_out 375p
+C_s4b s4_buf vcm 21p
+Xamp5 s4_buf s4_out s4_out vdd vss nbias miller_opamp cc_val=100p
+
+**********************************************
+* OUTPUT
+**********************************************
+Rout s4_out output 100
+
+**********************************************
+* INPUT SOURCE
+**********************************************
+Vin input vcm dc 0 ac 1
+
+.end

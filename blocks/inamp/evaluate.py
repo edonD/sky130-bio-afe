@@ -336,12 +336,29 @@ print i(Vdd)
         gain_db = 20 * math.log10(abs(gain)) if abs(gain) > 0 else -999
         print(f"  Voutp={voutp:.4f}V, Voutn={voutn:.4f}V")
         print(f"  Vout_diff={vout_diff*1e3:.3f} mV")
-        print(f"  Gain = {gain:.1f} V/V = {gain_db:.1f} dB")
+        print(f"  Gain = {gain:.1f} V/V = {gain_db:.1f} dB (DC=0 expected for CCIA)")
         print(f"  Power = {power_uw:.1f} uW" if power_uw else "  Power = N/A")
+
+        # Plot operating point
+        fig, ax = plt.subplots(figsize=(8, 5))
+        labels = ['Voutp', 'Voutn', 'VCM']
+        values = [voutp, voutn, VCM]
+        colors = ['steelblue', 'coral', 'gray']
+        ax.bar(labels, values, color=colors, alpha=0.8)
+        ax.axhline(y=0.2, color='red', linestyle='--', alpha=0.3, label='Output range')
+        ax.axhline(y=1.6, color='red', linestyle='--', alpha=0.3)
+        ax.axhline(y=VCM, color='green', linestyle='--', alpha=0.5, label=f'VCM={VCM}V')
+        ax.set_ylabel('Voltage (V)')
+        ax.set_title(f'DC Operating Point — Power: {power_uw:.1f} uW')
+        ax.set_ylim([0, 1.8])
+        ax.legend()
+        ax.grid(True, alpha=0.3)
+        plt.tight_layout()
+        plt.savefig(os.path.join(PLOT_DIR, 'dc_gain.png'), dpi=150)
+        plt.close()
     else:
         gain_db = None
         print("  WARNING: Could not parse DC operating point")
-        # Print stdout for debugging
         for line in stdout.splitlines()[-20:]:
             print(f"    {line}")
 
@@ -692,20 +709,23 @@ def tb6_electrode_offset():
     offsets = [-0.3, 0, 0.3]
 
     for dc_offset in offsets:
-        vin_diff = 1e-3
         extra = f"""
-Vinp inp 0 {VCM + dc_offset + vin_diff/2}
-Vinn inn 0 {VCM + dc_offset - vin_diff/2}
+* AC differential input on top of DC electrode offset
+Vinp inp 0 dc {VCM + dc_offset} ac 0.5
+Vinn inn 0 dc {VCM + dc_offset} ac -0.5
 """
-        control = """
+        control = f"""
 .control
 op
-print v(voutp) v(voutn) v(voutp)-v(voutn)
+print v(voutp) v(voutn)
+ac dec 20 1 100k
+wrdata _tb6_eo_{dc_offset:.1f}.dat v(voutp)-v(voutn)
 .endc
 """
         netlist = make_netlist(include_chopper=False, extra_sources=extra, control=control)
         stdout, stderr, rc = run_ngspice(netlist, f'tb6_eo_{dc_offset:.1f}')
 
+        # Check output CM from OP
         voutp = None
         voutn = None
         for line in stdout.splitlines():
@@ -721,16 +741,32 @@ print v(voutp) v(voutn) v(voutp)-v(voutn)
                 except:
                     pass
 
+        # Get gain from AC data
+        data = read_wrdata(f'_tb6_eo_{dc_offset:.1f}.dat')
+        gain_db = -999
+        if data is not None and len(data) > 3:
+            freqs = data[:, 0]
+            if data.shape[1] >= 3:
+                mags = np.sqrt(data[:, 1]**2 + data[:, 2]**2)
+            else:
+                mags = np.abs(data[:, 1])
+            lf_idx = np.argmin(np.abs(freqs - 10.0))
+            lf_gain = mags[lf_idx]
+            if lf_gain > 0:
+                gain_db = 20 * math.log10(lf_gain)
+
+        saturated = False
         if voutp is not None and voutn is not None:
-            vout_diff = voutp - voutn
-            gain = vout_diff / vin_diff
-            gain_db = 20 * math.log10(abs(gain)) if abs(gain) > 0 else -999
             saturated = voutp < 0.1 or voutp > 1.7 or voutn < 0.1 or voutn > 1.7
-            results[dc_offset] = {'gain_db': gain_db, 'voutp': voutp, 'voutn': voutn, 'sat': saturated}
-            print(f"  Offset={dc_offset:+.1f}V: gain={gain_db:.1f}dB, Voutp={voutp:.3f}, Voutn={voutn:.3f}, {'SAT!' if saturated else 'OK'}")
-        else:
-            results[dc_offset] = {'gain_db': -999, 'voutp': 0, 'voutn': 0, 'sat': True}
-            print(f"  Offset={dc_offset:+.1f}V: FAILED")
+
+        results[dc_offset] = {
+            'gain_db': gain_db,
+            'voutp': voutp if voutp else 0,
+            'voutn': voutn if voutn else 0,
+            'sat': saturated
+        }
+        status = 'SAT!' if saturated else 'OK'
+        print(f"  Offset={dc_offset:+.1f}V: gain={gain_db:.1f}dB, Voutp={voutp:.3f}, Voutn={voutn:.3f}, {status}")
 
     # Plot
     fig, ax = plt.subplots(figsize=(8, 5))

@@ -2,8 +2,15 @@ step	commit	score	specs_met	description
 0	e946417	0.15	1/6	baseline CCIA — output railed, PMOS bias wrong
 1	-	0.40	3/6	fixed bias, single-ended OTA — gain/bw/power pass, CMRR 34dB
 2	-	0.60	4/6	fully-differential with ideal CMFB — CMRR 311dB pass
-3	-	0.75	5/6	folded-cascode, noiseless pseudo-R, Cin=10.5p — gain pass
+3	a5f87a8	0.75	5/6	folded-cascode, noiseless pseudo-R, Cin=10.5p — gain pass
 4	-	0.75	5/6	noiseless behavioral loads — noise 3.4µVrms still fails
-5	-	0.75	5/6	8× parallel NMOS cascodes — noise unchanged (not bottleneck)
+5	-	0.75	5/6	8x parallel NMOS cascodes — noise unchanged (not bottleneck)
 6	-	0.85	5/6	Cin=50pF, Cfb=1pF — noise 1.4µVrms passes, gain 33.97 fails
-7	pending	1.00	6/6	Cin=51pF — gain 34.14dB, noise 1.40µVrms. All pass.
+7	27550ef	1.00	6/6	Cin=51pF — gain 34.14dB, noise 1.40µVrms. All pass.
+8	750f707	1.00	6/6	Cin=60pF, PVT 15/15 pass
+9	216cd1d	1.00	6/6	itail=5u, ifold=0.5u — improved noise margin
+10	ced2a4a	1.00	6/6	6x parallel input — noise 1.21µVrms
+11	b50731b	1.00	6/6	8x parallel input — noise 1.14µVrms, worst PVT 1.22µV
+12	98ccf9f	1.00	6/6	2x cascodes (simpler) — same noise, 30% more BW
+13	75507ab	1.00	6/6	Cin=62p, Phase B complete. HPF verified, linearity OK
+14	3227e8c	1.00	6/6	CMRR mismatch analysis: 0.1% cap → 77dB (needs chopping)

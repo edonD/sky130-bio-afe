@@ -216,3 +216,4 @@ Robust across full ±10% supply range.
 | 5 | 1.00 | 6/6 | Combined stress (mismatch+noise+VCM): ENOB 10.53-10.62 |
 | 6 | 1.00 | 6/6 | Extended MC 500 runs: 100% yield, p99 DNL=0.376, p1 ENOB=10.18 |
 | 7 | 1.00 | 6/6 | Area optimization: 5.5um min viable (100% yield), 70% area savings |
+| 8 | DISC | - | W=4u input pair: lower noise but 3/15 PVT failures. Reverted. |

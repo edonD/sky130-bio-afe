@@ -73,10 +73,10 @@ XM4 d1 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 * ─── Second stage: PMOS CS + NMOS current source load ───
 * M6 W=12u balances gm/linearity vs power
 XM6 out d1 vdd vdd sky130_fd_pr__pfet_01v8 w=12u l=8u m=1
-XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=3u l=8u m=2
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=8u m=2
 
 * ─── Miller compensation (~1.6 pF) + nulling resistor ───
-XCc d1 cc_mid sky130_fd_pr__cap_mim_m3_1 w=28u l=28u m=1
+XCc d1 cc_mid sky130_fd_pr__cap_mim_m3_1 w=27u l=27u m=1
 Rz cc_mid out 1.5k
 .ends opamp
 """

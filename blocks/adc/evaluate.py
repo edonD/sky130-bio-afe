@@ -1208,7 +1208,7 @@ def main():
         print("  PHASE B: Attacking the winner")
         print("=" * 60)
 
-        # TB7a: Monte Carlo with cap mismatch
+        # TB7a: Monte Carlo with cap mismatch (nominal unit cap)
         mc_results = monte_carlo_mismatch(comp_offset=comp_offset, n_runs=200)
         measurements['mc_dnl_mean'] = mc_results['dnl_mean']
         measurements['mc_dnl_worst'] = mc_results['dnl_worst']
@@ -1218,11 +1218,49 @@ def main():
         measurements['mc_enob_worst'] = mc_results['enob_worst']
         measurements['mc_yield_dnl_pct'] = mc_results['yield_dnl_pct']
 
+        # Sensitivity: try smaller unit caps (5x5um = min PDK)
+        print("\n--- Cap size sensitivity ---")
+        for w_um in [5.0, 7.0, 10.0, 15.0]:
+            sigma = CAP_MISMATCH_AC / 100.0 / np.sqrt(w_um * w_um)
+            n_test = 100
+            dnl_vals = []
+            for _ in range(n_test):
+                caps = generate_mismatched_caps(NBITS, sigma)
+                n_pts = NCODES * 8
+                v_in = np.linspace(0, VREF, n_pts, endpoint=False)
+                codes = sar_convert_batch(v_in, VREF, NBITS, comp_offset, 0, caps)
+                # Quick DNL
+                transitions = np.zeros(NCODES)
+                for k in range(NCODES):
+                    idx = np.where(codes == k)[0]
+                    transitions[k] = v_in[idx[0]] if len(idx) > 0 else np.nan
+                dnl_arr = np.diff(transitions[1:]) / VLSB - 1.0
+                dnl_vals.append(np.nanmax(np.abs(dnl_arr)))
+            dnl_arr = np.array(dnl_vals)
+            yield_pct = 100 * np.sum(dnl_arr < 1.0) / n_test
+            print(f"  {w_um:.0f}x{w_um:.0f} um: sigma/C={sigma*100:.3f}%, "
+                  f"DNL worst={np.max(dnl_arr):.3f}, yield={yield_pct:.0f}%")
+        measurements['cap_sensitivity_done'] = True
+
         # TB7b: PVT corners
         pvt_results = pvt_corners()
         measurements['pvt_worst_delay_ns'] = max(r['delay_ns'] for r in pvt_results)
         measurements['pvt_wrong_decisions'] = sum(1 for r in pvt_results
                                                    if r['decision'] != 0)
+
+        # Supply variation test
+        print("\n--- Supply Variation (±10%) ---")
+        for vdd_test in [1.62, 1.71, 1.80, 1.89, 1.98]:
+            v_ref_test = vdd_test
+            n_pts_sv = 4096
+            v_in_sv = np.linspace(0, v_ref_test, n_pts_sv)
+            codes_sv = sar_convert_batch(v_in_sv, v_ref_test, NBITS, comp_offset, 0,
+                                          caps_nominal)
+            is_mono = all(codes_sv[i] <= codes_sv[i+1] for i in range(len(codes_sv)-1))
+            code_max = np.max(codes_sv)
+            code_min = np.min(codes_sv)
+            print(f"  VDD={vdd_test:.2f}V: codes {code_min}-{code_max}, "
+                  f"monotonic={'Yes' if is_mono else 'No'}")
 
     with open(os.path.join(BLOCK_DIR, 'measurements.json'), 'w') as f:
         json.dump(measurements, f, indent=2)

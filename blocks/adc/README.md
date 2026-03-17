@@ -147,6 +147,32 @@ codes of dynamic range. ENOB > 10 means quantization noise won't limit the syste
    spec without calibration. Matches the target sigma/C < 0.45% for 12-bit.
 4. **Asynchronous SAR**: At 1 kSPS with 0.5 ns comparator, massive timing margin.
 
+## Sensitivity Analysis
+
+### Unit Cap Size (100 runs each)
+
+| Size | σ/C | Worst DNL | Yield (DNL<1.0) |
+|------|-----|-----------|-----------------|
+| 5x5 µm (PDK min) | 0.56% | 1.125 LSB | 99% |
+| 7x7 µm | 0.40% | 0.500 LSB | 100% |
+| 10x10 µm (chosen) | 0.28% | 0.500 LSB | 100% |
+| 15x15 µm | 0.19% | 0.250 LSB | 100% |
+
+Minimum viable without calibration: 7x7 µm. Our 10x10 µm has margin.
+At 5x5 µm (PDK minimum), yield drops to 99% — would need 1-bit calibration.
+
+### Supply Variation (±10%)
+
+| VDD | Monotonic | Code Range |
+|-----|-----------|------------|
+| 1.62V | Yes | 0-4095 |
+| 1.71V | Yes | 0-4095 |
+| 1.80V | Yes | 0-4095 |
+| 1.89V | Yes | 0-4095 |
+| 1.98V | Yes | 0-4095 |
+
+Robust across full ±10% supply range.
+
 ## Known Limitations
 
 1. **No SPICE-level DAC simulation**: The charge redistribution is modeled
@@ -169,3 +195,4 @@ codes of dynamic range. ENOB > 10 means quantization noise won't limit the syste
 | 0 | 0.90 | 5/6 | Initial baseline — wrong topology, broken timing |
 | 1 | 1.00 | 6/6 | Fixed StrongARM, wrdata parser, delay measurement |
 | 2 | 1.00 | 6/6 | Phase B: MC (200 runs, 100% yield), PVT (15/15 pass) |
+| 3 | 1.00 | 6/6 | Cap sensitivity (7µm min viable), supply ±10% pass |

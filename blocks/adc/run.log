@@ -1,0 +1,130 @@
+============================================================
+  12-bit SAR ADC Evaluation — SKY130 Bio-AFE
+============================================================
+=== TB0: Comparator Characterization ===
+  Comparator offset: 0.125 mV
+  Comparator delay:  0.45 ns
+  Decisions (sweep): [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+=== TB3: Conversion Timing ===
+  Comparator delay: 0.55 ns
+  Estimated conversion time: 0.031 us
+  Spec: < 500 us → PASS
+  Saved: plots/conversion_timing.png
+
+=== TB4: Power Measurement ===
+  Comparator avg current (at 10 MHz): 5.625 uA
+  Comparator power at 10 MHz: 10.126 uW
+  Duty cycle at 1 kSPS: 0.001200
+  Comparator power at 1 kSPS: 0.0122 uW
+  DAC switching power: 0.0796 uW
+  Total estimated power: 0.092 uW
+  Spec: < 10 uW → PASS
+  Saved: plots/power_vs_sample_rate.png
+
+  [Using mismatched DAC for primary DNL/INL measurement]
+
+=== TB1: Static Linearity (DNL/INL) ===
+  Using mismatched DAC capacitors
+  DNL max: 0.2500 LSB
+  INL max: 0.1250 LSB
+  Missing codes: 0
+  DNL spec: < 1.0 LSB → PASS
+  INL spec: < 2.0 LSB → PASS
+  Saved: plots/dnl_inl.png
+
+=== TB2: Dynamic Performance (ENOB) ===
+  Using mismatched DAC capacitors
+  Input frequency: 31.01 Hz
+  SINAD: 72.10 dB
+  ENOB:  11.68 bits
+  THD:   -90.28 dB
+  SFDR:  83.26 dB
+  ENOB spec: > 10 bits → PASS
+  Saved: plots/fft_spectrum.png
+
+=== TB5: Transfer Function ===
+  Monotonic: Yes
+  First code > 0 at: 0.9 mV
+  Last code < 4095 at: 1799.1 mV
+  Usable input range: 1.7982 V
+  Input range spec: > 1.5 V → PASS
+  Saved: plots/transfer_function.png
+
+=== TB6: Noise Floor ===
+  DC input: 0.900 V (mid-scale)
+  Mean code: 2047.2
+  Code std (noise): 0.644 LSB rms
+  Expected code: 2048
+  Noise spec: < 1.5 LSB rms → PASS
+  Saved: plots/noise_histogram.png
+
+============================================================
+  SCORING
+============================================================
+  enob: 11.6842 (target > 10.0) → PASS
+  dnl_lsb: 0.2500 (target < 1.0) → PASS
+  inl_lsb: 0.1250 (target < 2.0) → PASS
+  conversion_time_us: 0.0306 (target < 500.0) → PASS
+  power_uw: 0.0918 (target < 10.0) → PASS
+  input_range_v: 1.7982 (target > 1.5) → PASS
+
+  Score: 1.0000 (6/6 specs met)
+
+============================================================
+  PHASE B: Attacking the winner
+============================================================
+
+=== TB7a: Monte Carlo — 200 runs ===
+  Unit cap: 10.0x10.0 um, sigma/C = 0.280%
+  Run 50/200...
+  Run 100/200...
+  Run 150/200...
+  Run 200/200...
+
+  Monte Carlo Results (200 runs):
+  DNL max:  mean=0.195, std=0.082, worst=0.437 LSB
+  INL max:  mean=0.153, std=0.052, worst=0.313 LSB
+  ENOB:     mean=10.26, std=0.03, worst=10.18 bits
+  Missing codes: 0 runs with missing codes
+  DNL < 1.0 LSB in 200/200 runs (100%)
+  DNL < 1.5 LSB in 200/200 runs
+  Saved: plots/monte_carlo.png
+
+--- Cap size sensitivity ---
+  5x5 um: sigma/C=0.560%, DNL worst=1.125, yield=99%
+  7x7 um: sigma/C=0.400%, DNL worst=0.500, yield=100%
+  10x10 um: sigma/C=0.280%, DNL worst=0.500, yield=100%
+  15x15 um: sigma/C=0.187%, DNL worst=0.250, yield=100%
+
+=== TB7b: PVT Corner Analysis ===
+  tt  -40C: delay=0.70 ns, decision=correct
+  tt   27C: delay=0.60 ns, decision=correct
+  tt  125C: delay=0.50 ns, decision=correct
+  ss  -40C: delay=1.40 ns, decision=correct
+  ss   27C: delay=1.00 ns, decision=correct
+  ss  125C: delay=0.80 ns, decision=correct
+  ff  -40C: delay=0.40 ns, decision=correct
+  ff   27C: delay=0.32 ns, decision=correct
+  ff  125C: delay=0.40 ns, decision=correct
+  sf  -40C: delay=0.50 ns, decision=correct
+  sf   27C: delay=0.40 ns, decision=correct
+  sf  125C: delay=0.40 ns, decision=correct
+  fs  -40C: delay=1.50 ns, decision=correct
+  fs   27C: delay=1.00 ns, decision=correct
+  fs  125C: delay=0.90 ns, decision=correct
+
+  Worst-case delay: 1.50 ns
+  Wrong decisions: 0/15
+  Saved: plots/pvt_linearity.png
+
+--- Supply Variation (±10%) ---
+  VDD=1.62V: codes 0-4095, monotonic=Yes
+  VDD=1.71V: codes 0-4095, monotonic=Yes
+  VDD=1.80V: codes 0-4095, monotonic=Yes
+  VDD=1.89V: codes 0-4095, monotonic=Yes
+  VDD=1.98V: codes 0-4095, monotonic=Yes
+
+Measurements saved to measurements.json
+score=1.0000
+specs_met=6/6

@@ -1,0 +1,4 @@
+step	commit	score	specs_met	description
+0	04afc3b	0.90	5/6	initial baseline — wrong StrongARM topology, broken timing MEAS parsing
+1	8b22f07	1.00	6/6	fixed topology (NMOS latch to fn/fp), wrdata parser, delay measurement
+2	pending	1.00	6/6	Phase B: MC 200 runs (100% yield DNL<1.0), PVT 15/15 pass, mismatch model

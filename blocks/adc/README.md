@@ -175,17 +175,25 @@ Robust across full ±10% supply range.
 
 ## Known Limitations
 
-1. **No SPICE-level DAC simulation**: The charge redistribution is modeled
+1. **Comparator VCM-dependent offset**: SPICE characterization reveals large
+   comparator offsets at extreme common-mode voltages:
+   - VCM 0.5-1.1V: offset < 20 µV (usable)
+   - VCM < 0.4V or > 1.2V: offset 2-5 mV (10 missing codes)
+   In the biosignal application (0.7-1.1V), this is not a problem. But the
+   full 0-1.8V range has reduced linearity at extremes. A pre-amplifier or
+   complementary input pair would fix this.
+
+2. **No SPICE-level DAC simulation**: The charge redistribution is modeled
    analytically in Python. This misses charge injection from switches, clock
    feedthrough, finite switch resistance, and capacitor nonlinearity.
 
-2. **Comparator noise model is simplified**: Using a fixed 0.3 mV rms Gaussian
-   noise model instead of full SPICE noise simulation.
+3. **Comparator noise model is simplified**: SPICE shows the comparator resolves
+   down to 10 µV deterministically (no noise model). Real noise is ~0.1-0.3 mV
+   from kT/C, modeled as 0.3 mV Gaussian in Python (conservative).
 
-3. **No reference droop**: The reference voltage is assumed ideal. In practice,
-   charge sharing between DAC caps and reference source causes VREF droop.
+4. **No reference droop**: The reference voltage is assumed ideal.
 
-4. **Large total cap area**: 4096 × 10×10 µm = 0.41 mm². A real design would use
+5. **Large total cap area**: 4096 × 10×10 µm = 0.41 mm². A real design would use
    smaller unit caps (5×5 µm with calibration, or VPP waffle caps ~448 aF).
 
 ## Experiment History
@@ -196,3 +204,4 @@ Robust across full ±10% supply range.
 | 1 | 1.00 | 6/6 | Fixed StrongARM, wrdata parser, delay measurement |
 | 2 | 1.00 | 6/6 | Phase B: MC (200 runs, 100% yield), PVT (15/15 pass) |
 | 3 | 1.00 | 6/6 | Cap sensitivity (7µm min viable), supply ±10% pass |
+| 4 | 1.00 | 6/6 | VCM offset model: 10 missing codes at extremes, OK for bio app |

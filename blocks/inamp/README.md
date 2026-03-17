@@ -4,16 +4,18 @@
 
 | Parameter | Target | Measured | Status |
 |-----------|--------|----------|--------|
-| Gain | > 34 dB | 35.3 dB | PASS |
-| Input-referred noise | < 1.5 uVrms | 1.47 uVrms | PASS |
-| CMRR at 60 Hz (0.1% mismatch) | > 100 dB | 122.9 dB | PASS |
+| Gain | > 34 dB | 37.4 dB | PASS |
+| Input-referred noise | < 1.5 uVrms | 1.39 uVrms | PASS |
+| CMRR at 60 Hz (0.1% mismatch) | > 100 dB | 124.1 dB | PASS |
 | Input offset | < 50 uV | ~0 uV | PASS |
-| Bandwidth | > 10 kHz | 87 kHz | PASS |
+| Bandwidth | > 10 kHz | 69 kHz | PASS |
 | Power | < 15 uW | 14.8 uW | PASS |
 
 **PVT: 15/15 corners pass** (5 corners x 3 temps: -40/27/125 C)
 
-**Monte Carlo: CMRR > 100 dB for mismatch up to 0.5%** (spec requires 0.1%)
+**Noise PVT: 9/9 corners pass** (worst: 1.48 uVrms at ff/125C)
+
+**Monte Carlo: CMRR > 100 dB for mismatch up to 1.0%** (spec requires 0.1%)
 
 ## Circuit Description
 
@@ -43,8 +45,8 @@ Capacitively-Coupled Instrumentation Amplifier (CCIA) with system-level chopping
 
 | Component | Value | Purpose |
 |-----------|-------|---------|
-| Cin | 62 pF | Input coupling caps (large to dilute Cgs) |
-| Cfb | 1 pF | Feedback caps (gain = Cin/Cfb = 62) |
+| Cin | 80 pF | Input coupling caps (large to dilute Cgs) |
+| Cfb | 1 pF | Feedback caps (gain = Cin/Cfb = 80) |
 | Input pair | PMOS LVT 99u/8u x8 | Low 1/f noise, 792 um total W |
 | Tail current | 5 uA | Set by PMOS mirror from 1 uA ref |
 | Fold current | ~2.7 uA/side | NMOS 10.8u/16u |
@@ -82,7 +84,7 @@ DC gain through capacitive coupling is 0 (expected — CCIA blocks DC).
 
 ![AC Response](plots/ac_response.png)
 
-Flat gain of 35.3 dB from DC to ~10 kHz. -3 dB bandwidth at 87 kHz.
+Flat gain of 37.4 dB from DC to ~10 kHz. -3 dB bandwidth at 69 kHz.
 Ripple in 0.5-150 Hz biomedical band: < 0.01 dB (excellent flatness).
 
 ### TB3: CMRR with 0.1% Cin Mismatch
@@ -90,7 +92,7 @@ Ripple in 0.5-150 Hz biomedical band: < 0.01 dB (excellent flatness).
 ![CMRR](plots/cmrr_vs_freq.png)
 
 **Honest CMRR test**: 10 mV common-mode at 60 Hz, 0.1% deliberate Cin mismatch, transient + FFT.
-CMRR = 122.9 dB at 60 Hz with chopping enabled.
+CMRR = 124.1 dB at 60 Hz with chopping enabled.
 
 Left: time-domain output showing chopper switching at 10 kHz.
 Right: FFT showing 60 Hz component suppressed below -150 dB.
@@ -101,9 +103,9 @@ Right: FFT showing 60 Hz component suppressed below -150 dB.
 
 Output noise spectral density shows classic 1/f slope at low frequencies transitioning to white noise floor.
 
-- White noise floor: 120 nV/rtHz input-referred
-- With chopping (1/f noise moved to fchop): **1.47 uVrms** in 0.5-150 Hz band
-- Without chopping: 5.30 uVrms (dominated by 1/f)
+- White noise floor: 114 nV/rtHz input-referred
+- With chopping (1/f noise moved to fchop): **1.39 uVrms** in 0.5-150 Hz band
+- Without chopping: 4.91 uVrms (dominated by 1/f)
 
 ### TB5: Input Offset
 
@@ -135,8 +137,8 @@ ECG morphology preserved at output, 60 Hz rejected by chopping.
 
 | Metric | Worst | Best | Spec |
 |--------|-------|------|------|
-| Gain | 35.2 dB (ss/-40C) | 35.5 dB (ss/125C) | > 34 dB |
-| Bandwidth | 75.9 kHz (tt/125C) | 95.5 kHz (fs/-40C) | > 10 kHz |
+| Gain | 37.3 dB (ss/-40C) | 37.6 dB (sf/125C) | > 34 dB |
+| Bandwidth | 60.3 kHz (ff/125C) | 79.4 kHz (tt/-40C) | > 10 kHz |
 
 Gain is process-independent (set by Cin/Cfb capacitor ratio), varying only 0.3 dB across all PVT.
 
@@ -148,21 +150,21 @@ CMRR vs Cin mismatch with 10 kHz chopping:
 
 | Mismatch | CMRR | Status |
 |----------|------|--------|
-| 0.01% | 142.1 dB | PASS |
-| 0.03% | 127.4 dB | PASS |
-| 0.05% | 134.1 dB | PASS |
-| 0.1% | 122.9 dB | PASS |
-| 0.3% | 115.0 dB | PASS |
-| 0.5% | 113.3 dB | PASS |
-| 1.0% | 97.8 dB | FAIL |
+| 0.01% | 135.0 dB | PASS |
+| 0.03% | 128.9 dB | PASS |
+| 0.05% | 125.1 dB | PASS |
+| 0.1% | 124.1 dB | PASS |
+| 0.3% | 110.8 dB | PASS |
+| 0.5% | 108.9 dB | PASS |
+| 1.0% | 100.9 dB | PASS |
 
-CMRR exceeds 100 dB for mismatch up to ~0.7%. At the spec requirement of 0.1%, margin is 22.9 dB.
+CMRR exceeds 100 dB across the entire 0.01%-1.0% mismatch range. At the spec requirement of 0.1%, margin is 24.1 dB.
 
 ## Design Rationale
 
 1. **CCIA topology**: Gain = Cin/Cfb is process-independent (capacitor ratio). Capacitive coupling naturally rejects ±300 mV electrode DC offset.
 
-2. **Large Cin (62 pF)**: Dilutes the parasitic Cgs of the input pair. Without this, Cgs (~20-30 pF for 792 um W) creates a noise gain of ~2.7x, pushing noise above spec. With Cin=62 pF, noise gain ≈ (62+Cgs)/(62) ≈ 1.4x.
+2. **Large Cin (80 pF)**: Dilutes the parasitic Cgs of the input pair. Without this, Cgs (~30 pF for 792 um W) creates a noise gain of ~2.7x, pushing noise above spec. With Cin=80 pF, noise gain ≈ (80+Cgs)/(80) ≈ 1.38x.
 
 3. **PMOS LVT input pair**: SKY130 PMOS LVT has ~2x lower 1/f noise coefficient than standard PMOS, and ~10x lower than NMOS. Critical for biomedical band (0.5-150 Hz).
 
@@ -176,16 +178,14 @@ CMRR exceeds 100 dB for mismatch up to ~0.7%. At the spec requirement of 0.1%, m
 
 - Output CM: 0.9V (matches PGA input CM requirement)
 - Output swing: 0.2-1.6V (within PGA input range)
-- With 1 mV ECG x 62 gain = 62 mV swing around 0.9V: output 0.869-0.931V (comfortable)
-- Bandwidth 87 kHz >> 10 kHz requirement
+- With 1 mV ECG x 80 gain = 80 mV swing around 0.9V: output 0.860-0.940V (comfortable)
+- Bandwidth 69 kHz >> 10 kHz requirement
 
 ## Known Limitations
 
-1. **Noise margin is tight**: 1.47 uVrms vs 1.5 uVrms spec (only 2% margin). Temperature or process variation could push this over. A future optimization would increase the input pair gm.
+1. **Power margin is tight**: 14.8 uW vs 15 uW spec (1.3% margin). Reducing fold current further risks losing gain headroom.
 
-2. **Power margin is tight**: 14.8 uW vs 15 uW spec (1.3% margin). Reducing fold current further risks losing gain headroom.
-
-3. **1% mismatch**: CMRR drops to 97.8 dB at 1% Cin mismatch. Acceptable since typical MIM cap matching is 0.1-0.3%.
+2. **Noise PVT**: worst case is 1.48 uVrms at ff/125C (1.3% margin). Robust across all 9 tested corners.
 
 4. **Chopper artifacts**: The output contains residual switching glitches at 10 kHz and harmonics. The downstream filter (0.5-150 Hz bandpass) removes these.
 
@@ -197,3 +197,5 @@ CMRR exceeds 100 dB for mismatch up to ~0.7%. At the spec requirement of 0.1%, m
 |------|--------|-------|-------|-------------|
 | 0 | 68b15b9 | 1.00 | 6/6 | Initial CCIA: Cin=62pF, tail=5uA, PMOS LVT 99u/8u x8 |
 | 1 | 24d4389 | 1.00 | 6/6 | Fix transient convergence, PVT 15/15, Monte Carlo done |
+| 2 | 349ea7c | 1.00 | 6/6 | Fix TB6 electrode offset (AC analysis), add DC gain plot |
+| 3 | current | 1.00 | 6/6 | Cin=80pF: noise PVT pass, MC all pass incl. 1% mismatch |

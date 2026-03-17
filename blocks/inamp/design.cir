@@ -1,7 +1,7 @@
 * Capacitively-Coupled Instrumentation Amplifier (CCIA)
 * SKY130 Process, 1.8V supply
 * Topology: Fully-differential folded-cascode OTA with system-level chopping
-* Gain = Cin/Cfb = 62pF/1pF = 62 V/V = 35.8 dB
+* Gain = Cin/Cfb = 80pF/1pF = 80 V/V = 38.1 dB
 
 .lib "sky130_models/sky130.lib.spice" tt
 
@@ -42,16 +42,20 @@ Vncasc ncasc vss 1.0
 XMl1 outn cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
 XMl2 outp cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
 
-* CMFB: when output CM rises above vcm, raise cmfb to turn off PMOS loads
-Ecmfb cmfb 0 vol='0.9 + 100*((v(outp)+v(outn))/2 - v(vcm))'
+* CMFB: VCCS servo loop — numerically stable for transient
+Rcm1 outp cm_sense 100G
+Rcm2 outn cm_sense 100G
+Gcmfb 0 cmfb cm_sense vcm 1m
+Ccmfb cmfb 0 10p
+Rcmfb cmfb 0 900k
 .ends ota
 
 * ── Instantiate OTA ──
 Xota vgp vgn voutp_ota voutn_ota vcm vdd vss nbias pbias ota
 
 * ── Input capacitors (Cin = 62 pF) ──
-Cinp inp_chop_p vgp 62p
-Cinn inp_chop_n vgn 62p
+Cinp inp_chop_p vgp 80p
+Cinn inp_chop_n vgn 80p
 
 * ── Feedback capacitors (Cfb = 1 pF) ──
 Cfbp voutp_ota vgn 1p

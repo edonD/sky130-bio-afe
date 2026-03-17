@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 # ── Configuration ──
 VDD = 1.8
 VCM = 0.9
-CIN = 62e-12       # 62 pF — large Cin dilutes Cgs parasitic for lower noise
+CIN = 80e-12       # 80 pF — large Cin dilutes Cgs parasitic for lower noise
 CFB = 1e-12         # 1 pF
 GAIN_NOMINAL = CIN / CFB  # 51 V/V = 34.15 dB
 FCHOP = 10e3        # 10 kHz chopper frequency

@@ -55,7 +55,7 @@
 * === Parameters ===
 .param p_wp_pass = 8e-6
 .param p_lp_pass = 1e-6
-.param p_ra_l = 120e-6
+.param p_ra_l = 110e-6
 .param p_rptat_l = 12e-6
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
@@ -73,7 +73,7 @@ VSS vss 0 DC 0
 
 * === PMOS Pass Transistor (LDO-style output) ===
 * Gate driven by op-amp output. V_REF is the regulated output.
-XMP_pass vref opamp_out vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_pass} l={p_lp_pass} m=4
+XMP_pass vref opamp_out vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_pass} l={p_lp_pass} m=8
 
 * === Branch A: Ra + Q1 (1x PNP) ===
 * Current I_a = (V_REF - Vbe1) / Ra
@@ -86,8 +86,11 @@ XRb vref node_b vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_ra_l} mult=1
 XRptat node_b eb vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_rptat_l} mult=1
 XQ2 vss vss eb vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
 
-* Output filter cap (on regulated V_REF node)
+* Output filter cap and startup
 Cvref vref vss {p_cap}
+* Weak startup: ensures V_REF > 0 at power-up so op-amp can function
+* Also helps convergence during DC sweeps
+Rstart vdd vref 2e6
 
 * === Op-Amp (NFET diff pair, PMOS load) ===
 * + = node_a (Vbe1 ≈ 0.69V), - = node_b (I*Rptat + Vbe2 ≈ 0.69V)
@@ -114,6 +117,7 @@ Ccomp opamp_out vss 1p
 * === Simulation Control ===
 .lib "sky130_models/sky130.lib.spice" tt
 .option reltol=0.003 abstol=1e-12 gmin=1e-12 method=gear
+.option itl1=500 itl2=200 rshunt=1e9
 .nodeset v(vref)=1.2 v(node_a)=0.7 v(node_b)=0.7 v(opamp_out)=0.8
 
 .control

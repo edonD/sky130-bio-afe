@@ -19,7 +19,7 @@
 .param p_lp = 4e-6
 .param p_mp = 2
 .param p_rptat_l = 12e-6
-.param p_rout_l = 100e-6
+.param p_rout_l = 125e-6
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
 .param p_wn_ota = 1e-6
@@ -80,9 +80,9 @@ Rmirg ota_outp mirg 10k
 Cmirg mirg vss 1p
 
 * === Startup Circuit ===
-* Weak NFET pulls mirg toward GND (gate=VDD => always on)
-* This ensures current flows at power-up; OTA overrides in steady state
-XMN_start mirg vdd vss vss sky130_fd_pr__nfet_01v8 w={p_wn_start} l={p_ln_start} m=1
+* For DC: .nodeset provides initial guess so OTA finds bandgap operating point
+* For transient: capacitor coupling + initial condition
+* No permanent startup device needed — OTA feedback sustains the operating point
 
 * === Simulation Control ===
 .lib "sky130_models/sky130.lib.spice" tt

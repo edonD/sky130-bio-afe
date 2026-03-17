@@ -1,14 +1,14 @@
 {
-  "vref_dc": 1.205955,
-  "power_uw": 10.3736,
-  "idd": 5.763109e-06,
-  "tc_ppm_c": 89.61607412375744,
-  "vref_nom": 1.20595519,
-  "vref_min_temp": 1.19172721,
-  "vref_max_temp": 1.20955925,
-  "line_reg_mv_v": 0.8283333333334064,
-  "psrr_dc_db": 61.635897233005466,
-  "startup_time_us": 15.35,
-  "score": 0.75,
-  "specs_met": "5/6"
+  "vref_dc": 1.240842,
+  "power_uw": 8.520097,
+  "idd": 4.733387e-06,
+  "tc_ppm_c": 37.77245213435694,
+  "vref_nom": 1.24084177,
+  "vref_min_temp": 1.23566919,
+  "vref_max_temp": 1.24340268,
+  "line_reg_mv_v": 0.22361111111091078,
+  "psrr_dc_db": 73.01013240799617,
+  "startup_time_us": 18.05,
+  "score": 1.0,
+  "specs_met": "6/6"
 }

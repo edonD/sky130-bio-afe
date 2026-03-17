@@ -8,21 +8,21 @@ All specifications pass with at least 25% margin. PVT corners: 25/25 pass.
 
 | Parameter | Target | Measured | Margin | Pass |
 |-----------|--------|----------|--------|------|
-| V_REF (V) | 1.15 - 1.25 | 1.231 | 38.3% | PASS |
-| TC (ppm/C) | < 50 | 32.5 | 35.1% | PASS |
-| PSRR_DC (dB) | > 60 | 82.4 | 37.4% | PASS |
-| Line Reg (mV/V) | < 5 | 0.08 | 98.5% | PASS |
-| Power (uW) | < 20 | 8.3 | 58.4% | PASS |
+| V_REF (V) | 1.15 - 1.25 | 1.229 | 41.6% | PASS |
+| TC (ppm/C) | < 50 | 30.6 | 38.9% | PASS |
+| PSRR_DC (dB) | > 60 | 85.1 | 41.8% | PASS |
+| Line Reg (mV/V) | < 5 | 0.06 | 98.9% | PASS |
+| Power (uW) | < 20 | 8.5 | 57.3% | PASS |
 | Startup (us) | < 100 | 6.8 | 93.2% | PASS |
 
 ## Competitor Comparison
 
 | Metric | This Design | ADS1299 | AD8233 | MAX30003 | ADS1292R |
 |--------|------------|---------|--------|----------|----------|
-| V_REF (V) | 1.231 | ~2.4* | N/A | ~1.2* | ~2.4* |
-| TC (ppm/C) | 32.5 | ~10* | N/A | ~20* | ~10* |
-| PSRR (dB) | 82.4 | ~80* | N/A | ~70* | ~80* |
-| Power (uW) | **8.3** | ~200* | ~50* | ~30* | ~100* |
+| V_REF (V) | 1.229 | ~2.4* | N/A | ~1.2* | ~2.4* |
+| TC (ppm/C) | 30.6 | ~10* | N/A | ~20* | ~10* |
+| PSRR (dB) | **85.1** | ~80* | N/A | ~70* | ~80* |
+| Power (uW) | **8.5** | ~200* | ~50* | ~30* | ~100* |
 | Startup (us) | **6.8** | ~1000* | N/A | ~100* | ~1000* |
 
 *Estimated from datasheets. Commercial parts use trimmed bandgaps with higher-order correction.
@@ -96,13 +96,13 @@ The OTA forces Vbe(Q1) = I*Rptat + Vbe(Q2), establishing:
 | p_r_w | 0.69 um | Resistor width (xhigh_po) |
 | p_nbjt | 8 | BJT area ratio (Q2/Q1) |
 | p_wn_ota | 2 um | OTA NFET diff pair width |
-| p_ln_ota | 2 um | OTA NFET diff pair length |
+| p_ln_ota | 3 um | OTA NFET diff pair length |
 | p_wp_ota | 2 um | OTA PMOS load width |
-| p_lp_ota | 4 um | OTA PMOS load length |
+| p_lp_ota | 5 um | OTA PMOS load length |
 | p_wn_tail | 1 um | OTA tail NFET width |
 | p_ln_tail | 4 um | OTA tail NFET length |
-| Rbias_l | 400 um | OTA tail bias resistor length |
-| Rcomp | 10 kOhm | Compensation resistor |
+| Rbias_l | 350 um | OTA tail bias resistor length |
+| Rcomp | 8 kOhm | Compensation resistor |
 | Ccomp | 2 pF | Compensation capacitor |
 | Cvref | 5 pF | Output filter capacitor |
 
@@ -124,16 +124,16 @@ Each design parameter was varied by +/-20% one at a time. Results:
 
 | Category | Pass | Total | Pass Rate |
 |----------|------|-------|-----------|
-| OTA parameters | 13 | 14 | 93% |
-| Pass transistor | 3 | 4 | 75% |
+| OTA parameters | 10 | 14 | 71% |
+| Pass transistor | 2 | 4 | 50% |
 | Compensation/Cap | 4 | 4 | 100% |
 | Core bandgap (Ra, Rptat, N) | 0 | 6 | 0% |
 | Resistor width | 1 | 2 | 50% |
-| **Overall** | **17** | **26** | **65%** |
+| **Overall** | **14** | **26** | **54%** |
 
 **Note on core bandgap parameters:** Ra, Rptat, and N define the fundamental bandgap equation V_REF = Vt*ln(N)*Ra/Rptat + Vbe. A ±20% change in these is equivalent to designing a completely different bandgap — it changes V_REF by ~100mV and TC by 10x. In real IC layout, these are precision-matched components with <1% variation. The 0% pass rate for ±20% variation is expected and not a design flaw.
 
-**Circuit parameters (OTA, pass transistor):** 20/22 pass (91%) — the design is very robust to manufacturing variation in the amplifier and regulation loop.
+**Circuit parameters (OTA, pass transistor):** 16/20 pass (80%) — the design is reasonably robust to manufacturing variation. PSRR is the most sensitive spec, dropping below 60 dB when certain OTA or pass transistor parameters are at their ±20% extremes.
 
 ## What Was Tried and Rejected
 
@@ -168,4 +168,6 @@ For the downstream 20-bit sigma-delta ADC at 1.8V:
 | 3 | - | 0.80 | 5/6 | Resistive startup — killed PSRR |
 | 4 | - | - | - | Parametric sweep of OTA and pass transistor |
 | 5 | ba52aad | 1.00 | 6/6 | Optimized: wp_pass=20u, Ra=122u, Rptat=12.5u. All margins >= 25% |
-| 6 | - | - | 17/26 | Robustness test: ±20% parameter variation |
+| 6 | - | - | 17/26 | Robustness test v1: ±20% parameter variation |
+| 7 | - | 1.00 | 6/6 | OTA improved: Ln=3u, Lp=5u, Rbias=350u, Rcomp=8k. Min margin 41.6% |
+| 8 | - | - | 14/26 | Robustness test v2: higher margins but PSRR more sensitive |

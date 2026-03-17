@@ -11,9 +11,9 @@
 .param p_r_w = 0.69e-6
 .param p_nbjt = 8
 .param p_wn_ota = 2e-6
-.param p_ln_ota = 2e-6
+.param p_ln_ota = 3e-6
 .param p_wp_ota = 2e-6
-.param p_lp_ota = 4e-6
+.param p_lp_ota = 5e-6
 .param p_wn_tail = 1e-6
 .param p_ln_tail = 4e-6
 .param p_cap = 5e-12
@@ -40,7 +40,7 @@ Cvref vref vss {p_cap}
 * === OTA (NFET diff pair, PMOS active load) ===
 XMN_bias ota_bias ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
 XMN_tail ota_tail ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
-XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=400e-6 mult=1
+XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=350e-6 mult=1
 
 * Diff pair
 XMN_p ota_outn node_b ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
@@ -51,7 +51,7 @@ XMP_ln ota_outn ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ot
 XMP_lp ota_outp ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ota} m=1
 
 * Compensation
-Rcomp ota_outp opamp_out 10k
+Rcomp ota_outp opamp_out 8k
 Ccomp opamp_out vss 2p
 
 * === Simulation Control ===

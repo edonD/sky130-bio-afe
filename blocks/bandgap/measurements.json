@@ -1,0 +1,49 @@
+{
+  "vref_v": 1.229209,
+  "tc_ppm_c": 30.56322537167433,
+  "psrr_dc_db": 85.09243102949647,
+  "line_regulation_mv_v": 0.05563888888874641,
+  "power_uw": 8.548829,
+  "startup_time_us": 6.827999999999999,
+  "pvt_pass_rate": 1.0,
+  "pvt_total": 25,
+  "score": 1.0,
+  "details": {
+    "vref_v": {
+      "value": 1.229209,
+      "pass": true,
+      "margin_pct": 41.6,
+      "meets_25pct": true
+    },
+    "tc_ppm_c": {
+      "value": 30.56322537167433,
+      "pass": "True",
+      "margin_pct": 38.9,
+      "meets_25pct": "True"
+    },
+    "psrr_dc_db": {
+      "value": 85.09243102949647,
+      "pass": "True",
+      "margin_pct": 41.8,
+      "meets_25pct": "True"
+    },
+    "line_regulation_mv_v": {
+      "value": 0.05563888888874641,
+      "pass": "True",
+      "margin_pct": 98.9,
+      "meets_25pct": "True"
+    },
+    "power_uw": {
+      "value": 8.548829,
+      "pass": true,
+      "margin_pct": 57.3,
+      "meets_25pct": true
+    },
+    "startup_time_us": {
+      "value": 6.827999999999999,
+      "pass": "True",
+      "margin_pct": 93.2,
+      "meets_25pct": "True"
+    }
+  }
+}

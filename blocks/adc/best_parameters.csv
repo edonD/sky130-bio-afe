@@ -1,0 +1,12 @@
+parameter,value,min,max,unit,description
+wtail,6u,4u,10u,um,Tail NMOS width
+win,3u,2u,4u,um,Input pair NMOS width (noise vs PVT tradeoff)
+wn,2u,1u,4u,um,NMOS latch width (must be > win/2 for PVT robustness)
+wp,1u,0.5u,2u,um,PMOS latch/reset width
+lmin,0.15u,0.15u,0.15u,um,Channel length (minimum for 1.8V devices)
+vref,1.8,1.8,1.8,V,Reference voltage (= VDD for full rail-to-rail)
+cap_unit_w,10,5.5,15,um,Unit capacitor width (MIM)
+cap_unit_l,10,5.5,15,um,Unit capacitor length (MIM)
+cap_unit_value,200,60,450,fF,Unit capacitor value (2.0 fF/um^2 density)
+cap_mismatch_ac,2.8,2.8,2.8,%um,Pelgrom mismatch coefficient (SKY130 MIM)
+comp_load_cap,10,5,20,fF,Load capacitance on comparator outputs

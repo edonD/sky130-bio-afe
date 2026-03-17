@@ -1,0 +1,38 @@
+* 12-bit SAR ADC — SKY130 Bio-AFE
+* StrongARM latch comparator + binary-weighted charge-redistribution DAC
+* Baseline design: transistor-level comparator, ideal DAC
+
+**************************************************
+* STRONGARM LATCH COMPARATOR
+**************************************************
+* Ports: vinp vinn clk outp outn vdd vss
+* When CLK rises: compares vinp vs vinn
+* outp=VDD, outn=0 if vinp > vinn (positive decision)
+* outp=0, outn=VDD if vinp < vinn (negative decision)
+* When CLK=0: reset, outp=outn=VDD
+
+.subckt strongarm_comp vinp vinn clk outp outn vdd vss
+.param wp=1u wn=2u win=3u wtail=6u lmin=0.15u
+
+* Tail current source (NMOS, clocked)
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=wtail l=lmin
+
+* Input differential pair (NMOS)
+* fn, fp are internal nodes connecting input pair to cross-coupled NMOS
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=win l=lmin
+
+* NMOS cross-coupled latch (sources connect to input pair drains)
+* This ensures the NMOS latch is inactive during reset (CLK=0)
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=wn l=lmin
+
+* PMOS reset switches (active when CLK=0)
+X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=wp l=lmin
+X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=wp l=lmin
+
+* PMOS cross-coupled latch
+X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=wp l=lmin
+X8     outn   outp   vdd  vdd  sky130_fd_pr__pfet_01v8 w=wp l=lmin
+
+.ends strongarm_comp

@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 GAINS = [1, 2, 4, 8, 16, 32, 64, 128]
 VCM = 0.9
 VDD = 1.8
-RF_VAL = 10e6  # 10 MΩ feedback resistor (minimize opamp output loading)
+RF_VAL = 10e6  # 10 MΩ feedback resistor (balance: DC gain vs THD/feedback speed)
 
 SPECS = {
     'gain_settings':     {'target': 7,     'op': '>=', 'weight': 15},
@@ -71,9 +71,9 @@ XM3 d2 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 XM4 d1 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 
 * ─── Second stage: PMOS CS + NMOS current source load ───
-* L=8u for both driver and load → very high second-stage gain
-XM6 out d1 vdd vdd sky130_fd_pr__pfet_01v8 w=8u l=8u m=1
-XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=8u m=2
+* L=8u for high gain, wider M6 for higher gm
+XM6 out d1 vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=8u m=1
+XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=8u m=2
 
 * ─── Miller compensation (~1.6 pF) + nulling resistor ───
 XCc d1 cc_mid sky130_fd_pr__cap_mim_m3_1 w=28u l=28u m=1

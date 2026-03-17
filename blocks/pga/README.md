@@ -22,15 +22,15 @@ Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input dif
 
 ## Measured vs Target
 
-| Parameter | Measured | Target | Status |
-|-----------|----------|--------|--------|
-| Gain settings | 8 (all pass) | >= 7 | PASS |
-| Gain error | 0.87% (worst, G=128) | < 1% | PASS |
-| Bandwidth (G=128) | 15.5 kHz | > 10 kHz | PASS |
-| Output noise (G=1) | 25.6 µVrms | < 50 µVrms | PASS |
-| THD (10 Hz, 1 Vpp) | 0.089% | < 0.1% | PASS |
-| Power | 7.4 µW | < 10 µW | PASS |
-| Settling time | 71.5 µs | < 100 µs | PASS |
+| Parameter | Measured | Target | Margin | Status |
+|-----------|----------|--------|--------|--------|
+| Gain settings | 8 (all pass) | >= 7 | +1 | PASS |
+| Gain error | 0.65% (worst, G=128) | < 1% | 35% | PASS |
+| Bandwidth (G=128) | 15.5 kHz | > 10 kHz | 55% | PASS |
+| Output noise (G=1) | 25.6 µVrms | < 50 µVrms | 49% | PASS |
+| THD (10 Hz, 1 Vpp) | 0.021% | < 0.1% | 79% | PASS |
+| Power | 9.8 µW | < 10 µW | 2% | PASS |
+| Settling time | 71.6 µs | < 100 µs | 28% | PASS |
 
 ## Gain Error at Each Setting
 
@@ -39,11 +39,11 @@ Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input dif
 | 1 | 1.000 | 0.01% |
 | 2 | 2.000 | 0.02% |
 | 4 | 3.999 | 0.03% |
-| 8 | 7.995 | 0.06% |
-| 16 | 15.981 | 0.12% |
-| 32 | 31.928 | 0.23% |
-| 64 | 63.717 | 0.44% |
-| 128 | 126.880 | 0.87% |
+| 8 | 7.996 | 0.05% |
+| 16 | 15.986 | 0.09% |
+| 32 | 31.947 | 0.17% |
+| 64 | 63.791 | 0.33% |
+| 128 | 127.173 | 0.65% |
 
 ## Key Plots
 
@@ -91,7 +91,7 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 2. **Resistor values**: 10 MΩ poly resistors require ~5000 squares — very large area. Real implementation might use T-network or capacitive feedback to reduce resistor values.
 3. **Phase margin at G=1**: AC response shows some peaking near 800 kHz. While outside biosignal BW, this needs investigation in Phase B.
 4. **Output swing**: At G=128, max linear output swing is ±5.5 mV around VCM=0.9V. Only suitable for very small signals (EEG: 10-100 µV).
-5. **SF corner gain error**: 1.13% at G=128 (exceeds 1% nominal spec, within 2% relaxed PVT spec). Could be improved with higher DC gain margin.
+5. **Power margin**: Only 2% margin (9.8 µW vs 10 µW). At FF/125°C: 9.6 µW (still passing).
 6. **Gain switching**: Current design uses parameterized Rin. Real implementation needs transmission gates with on-resistance << Rin.
 
 ## PVT Corner Results (TB6)
@@ -102,13 +102,13 @@ Tested gain=128 across 5 corners x 3 temperatures (15 conditions). Relaxed targe
 
 | Corner | -40C Error | 27C Error | 125C Error | -40C BW | 27C BW | 125C BW |
 |--------|-----------|----------|-----------|---------|--------|---------|
-| tt | 0.86% | 0.87% | 0.94% | 18.2 kHz | 15.8 kHz | 12.6 kHz |
-| ss | 0.93% | 0.93% | 0.98% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
-| ff | 0.82% | 0.84% | 0.90% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
-| sf | 1.13% | 1.10% | 1.12% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
-| fs | 0.74% | 0.77% | 0.84% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
+| tt | 0.67% | 0.65% | 0.66% | 18.2 kHz | 15.8 kHz | 12.6 kHz |
+| ss | 0.72% | 0.69% | 0.68% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
+| ff | 0.63% | 0.62% | 0.63% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
+| sf | 0.89% | 0.83% | 0.79% | 19.1 kHz | 15.8 kHz | 13.2 kHz |
+| fs | 0.57% | 0.56% | 0.59% | 18.2 kHz | 15.1 kHz | 12.6 kHz |
 
-- **Worst gain error**: 1.13% (SF, -40C) — within 2% PVT limit
+- **Worst gain error**: 0.89% (SF, -40C) — within both 1% nominal and 2% PVT limits
 - **Worst BW**: 12.6 kHz (tt/ss/fs, 125C) — above 10 kHz target
 - **All 15 conditions PASS**
 
@@ -124,3 +124,4 @@ Tested gain=128 across 5 corners x 3 temperatures (15 conditions). Relaxed targe
 | 5 | 0.80 | 6/7 | Rf=4M, L=8u load |
 | 6 | 0.90 | 6/7 | Rf=8M, L=8u diff pair (settling fail) |
 | 7 | 1.00 | 7/7 | W=8u L=4u diff pair, Rf=10M, Cc=1.6pF |
+| 8 | 1.00 | 7/7 | Wider 2nd stage (W=16u) → 0.65% err, 0.021% THD, PVT all pass |

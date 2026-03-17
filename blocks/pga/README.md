@@ -26,10 +26,10 @@ Inverting amplifier with two-stage Miller-compensated CMOS opamp (NMOS input dif
 |-----------|----------|--------|--------|--------|
 | Gain settings | 8 (all pass) | >= 7 | +1 | PASS |
 | Gain error | 0.65% (worst, G=128) | < 1% | 35% | PASS |
-| Bandwidth (G=128) | 14.1 kHz | > 10 kHz | 41% | PASS |
+| Bandwidth (G=128) | 14.8 kHz | > 10 kHz | 48% | PASS |
 | Output noise (G=1) | 25.8 µVrms | < 50 µVrms | 48% | PASS |
-| THD (10 Hz, 1 Vpp) | 0.021% | < 0.1% | 79% | PASS |
-| Power | 8.8 µW | < 10 µW | 12% | PASS |
+| THD (10 Hz, 1 Vpp) | 0.0017% (hi-fi) | < 0.1% | 98% | PASS |
+| Power | 9.3 µW | < 10 µW | 7% | PASS |
 | Settling time | 78.2 µs | < 100 µs | 22% | PASS |
 
 ## Gain Error at Each Setting

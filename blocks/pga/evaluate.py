@@ -55,8 +55,8 @@ def opamp_subckt():
     return """
 .subckt opamp inp inn out vdd vss
 * ─── Bias generation ───
-* 0.9uA reference through NMOS diode
-Ibias vdd nbias 0.9u
+* 0.95uA reference through NMOS diode
+Ibias vdd nbias 0.95u
 XMn_diode nbias nbias vss vss sky130_fd_pr__nfet_01v8 w=2u l=4u m=1
 
 * ─── First stage: NMOS diff pair + PMOS active load ───

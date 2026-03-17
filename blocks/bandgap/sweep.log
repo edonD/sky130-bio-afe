@@ -1,0 +1,8 @@
+Total: 68 configs
+[4] NEW BEST: min_margin=1.4% vref=1.2363V tc=29.1ppm psrr=60.9dB power=8.5uW | {'p_ra_l': '119e-6', 'p_rptat_l': '12e-6', 'p_nbjt': '8', 'p_lp_ota': '4e-6', 'p_ln_ota': '2e-6', 'p_wp_ota': '2e-6', 'p_wn_ota': '2e-6', 'p_ln_tail': '4e-6'}
+[7] NEW BEST: min_margin=18.3% vref=1.2408V tc=27.5ppm psrr=73.0dB power=8.5uW | {'p_ra_l': '120e-6', 'p_rptat_l': '12e-6', 'p_nbjt': '8', 'p_lp_ota': '4e-6', 'p_ln_ota': '2e-6', 'p_wp_ota': '2e-6', 'p_wn_ota': '2e-6', 'p_ln_tail': '4e-6'}
+  ... 20/68
+  ... 40/68
+  ... 60/68
+
+BEST: min_margin=18.3% cfg={'p_ra_l': '120e-6', 'p_rptat_l': '12e-6', 'p_nbjt': '8', 'p_lp_ota': '4e-6', 'p_ln_ota': '2e-6', 'p_wp_ota': '2e-6', 'p_wn_ota': '2e-6', 'p_ln_tail': '4e-6'} result={'vref': 1.240842, 'power': 8.520097, 'psrr': np.float64(73.01013240799617), 'tc': np.float64(27.49547667112047)}

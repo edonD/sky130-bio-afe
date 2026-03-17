@@ -1,0 +1,98 @@
+* SKY130 Bandgap Voltage Reference — OTA-Regulated Current Mirror BGR
+*
+* Architecture:
+*   OTA forces V(d1) = V(d2) by driving common PMOS mirror gate
+*   Branch 1: MP1(gate=mirg) -> d1 -> Q1(1x PNP) -> GND
+*     V(d1) = Vbe1
+*   Branch 2: MP2(gate=mirg) -> d2 -> Rptat -> Q2(8x PNP) -> GND
+*     V(d2) = I*Rptat + Vbe2
+*   OTA eq: Vbe1 = I*Rptat + Vbe2 => I = Vt*ln(N)/Rptat
+*   Output: MP3(gate=mirg) -> Rout -> Q3(1x) -> GND
+*     V_REF = I*Rout + Vbe3 = Vt*ln(N)*Rout/Rptat + Vbe3
+*   Zero-TC: Rout/Rptat * ln(N) ≈ 17 => Rout/Rptat ≈ 8.2 for N=8
+*
+* Power budget: I = Vt*ln(8)/Rptat. For I ≈ 1.5 µA: Rptat ≈ 36 kΩ
+*   3 branches + OTA ≈ 6 µA total => P ≈ 10.8 µW at 1.8V
+
+* === Parameters ===
+.param p_wp = 4e-6
+.param p_lp = 8e-6
+.param p_mp = 2
+.param p_rptat_l = 12e-6
+.param p_rout_l = 127e-6
+.param p_r_w = 0.69e-6
+.param p_nbjt = 8
+.param p_wn_ota = 1e-6
+.param p_ln_ota = 2e-6
+.param p_wp_ota = 1e-6
+.param p_lp_ota = 6e-6
+.param p_wn_tail = 1e-6
+.param p_ln_tail = 4e-6
+.param p_cap = 2e-12
+.param p_wn_start = 0.42e-6
+.param p_ln_start = 8e-6
+
+* === Power Supply ===
+VDD vdd 0 DC 1.8
+VSS vss 0 DC 0
+
+* === PMOS Current Mirror (gate = mirg, driven by OTA) ===
+XMP1 d1 mirg vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+XMP2 d2 mirg vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+XMP3 d3 mirg vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp} l={p_lp} m={p_mp}
+
+* === Branch 1: Q1 (1x PNP) ===
+XQ1 vss vss d1 vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m=1
+
+* === Branch 2: Rptat + Q2 (8x PNP) ===
+XRptat d2 e2 vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_rptat_l} mult=1
+XQ2 vss vss e2 vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m={p_nbjt}
+
+* === Output Branch: Rout + Q3 (1x PNP) ===
+XRout d3 e3 vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l={p_rout_l} mult=1
+XQ3 vss vss e3 vss sky130_fd_pr__pnp_05v5_w3p40l3p40 m=1
+
+* Output node (d3 = V_REF)
+Rvref d3 vref 0.01
+Cvref vref vss {p_cap}
+
+* === OTA: NMOS diff pair with PMOS active load ===
+* Inputs: + = d2 (PTAT branch), - = d1 (CTAT branch)
+* Output: mirg
+* Feedback: V(d2) > V(d1) => mirg rises => less PMOS current => V(d2) drops. STABLE.
+
+* Tail current: NFET biased by self-bias (diode-connected + mirror)
+XMN_bias ota_bias ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
+XMN_tail ota_tail ota_bias vss vss sky130_fd_pr__nfet_01v8 w={p_wn_tail} l={p_ln_tail} m=1
+* Bias current set by R from VDD to ota_bias drain
+XRbias vdd ota_bias vss sky130_fd_pr__res_xhigh_po_0p69 w={p_r_w} l=200e-6 mult=1
+
+* Diff pair
+XMN_p ota_outn d2 ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
+XMN_n ota_outp d1 ota_tail vss sky130_fd_pr__nfet_01v8 w={p_wn_ota} l={p_ln_ota} m=1
+
+* Active load (PMOS current mirror)
+XMP_ln ota_outn ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ota} m=1
+XMP_lp ota_outp ota_outn vdd vdd sky130_fd_pr__pfet_01v8 w={p_wp_ota} l={p_lp_ota} m=1
+
+* OTA output to mirror gate (with compensation cap)
+Rmirg ota_outp mirg 10k
+Cmirg mirg vss 1p
+
+* === Startup Circuit ===
+* For DC: .nodeset provides initial guess so OTA finds bandgap operating point
+* For transient: capacitor coupling + initial condition
+* No permanent startup device needed — OTA feedback sustains the operating point
+
+* === Simulation Control ===
+.lib "sky130_models/sky130.lib.spice" tt
+.option reltol=0.003 abstol=1e-12 gmin=1e-12 method=gear
+.nodeset v(mirg)=0.8 v(d1)=0.7 v(d2)=0.7 v(d3)=1.2 v(vref)=1.2
+
+.control
+dc VDD 1.62 1.98 0.01
+wrdata /home/ubuntu/workspace/sky130-bio-afe/blocks/bandgap/qtest_supply v(vref)
+quit
+.endc
+
+.end

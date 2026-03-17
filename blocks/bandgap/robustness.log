@@ -1,0 +1,47 @@
+================================================================================
+ROBUSTNESS TEST: ±20% Parameter Variation
+================================================================================
+
+--- Nominal ---
+  vref=1.2308 tc=32.4 psrr=82.4 power=8.3 | PASS
+  p_wp_pass -20% (2.00e-05 → 1.60e-05): PASS vref=1.2298 tc=33.2 psrr=64.4 pwr=8.3
+  p_wp_pass +20% (2.00e-05 → 2.40e-05): PASS vref=1.2314 tc=35.3 psrr=66.7 pwr=8.3
+  p_lp_pass -20% (1.00e-06 → 8.00e-07): FAIL vref=1.2325 tc=21.5 psrr=44.4 pwr=8.3 [psrr=44.4, line_reg=6.01]
+  p_lp_pass +20% (1.00e-06 → 1.20e-06): PASS vref=1.2294 tc=38.8 psrr=69.6 pwr=8.3
+  p_ra_l -20% (1.22e-04 → 9.76e-05): FAIL vref=1.1233 tc=323.4 psrr=56.5 pwr=8.3 [vref_v=1.1233, tc=323.4, psrr=56.5]
+  p_ra_l +20% (1.22e-04 → 1.46e-04): FAIL vref=1.3382 tc=253.1 psrr=111.8 pwr=8.3 [vref_v=1.3382, tc=253.1]
+  p_rptat_l -20% (1.25e-05 → 1.00e-05): FAIL vref=1.3681 tc=320.0 psrr=71.6 pwr=9.7 [vref_v=1.3681, tc=320.0]
+  p_rptat_l +20% (1.25e-05 → 1.50e-05): FAIL vref=1.1377 tc=278.1 psrr=62.8 pwr=7.4 [vref_v=1.1377, tc=278.1]
+  p_r_w -20% (6.90e-07 → 5.52e-07): PASS vref=1.2258 tc=33.0 psrr=75.7 pwr=6.8
+  p_r_w +20% (6.90e-07 → 8.28e-07): FAIL vref=1.2348 tc=19.6 psrr=47.0 pwr=9.9 [psrr=47.0]
+  p_nbjt -20% (8.00e+00 → 6.40e+00): FAIL vref=1.1718 tc=179.9 psrr=67.3 pwr=7.7 [tc=179.9]
+  p_nbjt +20% (8.00e+00 → 9.60e+00): FAIL vref=1.2786 tc=115.7 psrr=94.1 pwr=8.8 [vref_v=1.2786, tc=115.7]
+  p_wn_ota -20% (2.00e-06 → 1.60e-06): PASS vref=1.2308 tc=25.3 psrr=98.5 pwr=8.3
+  p_wn_ota +20% (2.00e-06 → 2.40e-06): PASS vref=1.2310 tc=31.9 psrr=76.2 pwr=8.4
+  p_ln_ota -20% (2.00e-06 → 1.60e-06): PASS vref=1.2309 tc=36.8 psrr=67.0 pwr=8.4
+  p_ln_ota +20% (2.00e-06 → 2.40e-06): PASS vref=1.2293 tc=28.3 psrr=67.7 pwr=8.3
+  p_wp_ota -20% (2.00e-06 → 1.60e-06): PASS vref=1.2315 tc=30.0 psrr=74.7 pwr=8.3
+  p_wp_ota +20% (2.00e-06 → 2.40e-06): PASS vref=1.2298 tc=31.9 psrr=80.8 pwr=8.3
+  p_lp_ota -20% (4.00e-06 → 3.20e-06): PASS vref=1.2293 tc=33.0 psrr=67.8 pwr=8.3
+  p_lp_ota +20% (4.00e-06 → 4.80e-06): PASS vref=1.2318 tc=24.2 psrr=65.1 pwr=8.3
+  p_wn_tail -20% (1.00e-06 → 8.00e-07): PASS vref=1.2305 tc=27.8 psrr=83.0 pwr=8.2
+  p_wn_tail +20% (1.00e-06 → 1.20e-06): PASS vref=1.2324 tc=30.7 psrr=67.4 pwr=8.4
+  p_ln_tail -20% (4.00e-06 → 3.20e-06): PASS vref=1.2308 tc=23.2 psrr=78.1 pwr=8.4
+  p_ln_tail +20% (4.00e-06 → 4.80e-06): FAIL vref=1.2306 tc=33.9 psrr=50.9 pwr=8.3 [psrr=50.9]
+  p_cap -20% (5.00e-12 → 4.00e-12): PASS vref=1.2308 tc=32.4 psrr=82.4 pwr=8.3
+  p_cap +20% (5.00e-12 → 6.00e-12): PASS vref=1.2308 tc=32.4 psrr=82.4 pwr=8.3
+
+================================================================================
+ROBUSTNESS SUMMARY: 17/26 variations pass all specs
+================================================================================
+
+Failing variations:
+  p_lp_pass -20%: psrr=44.4, line_reg=6.01
+  p_ra_l -20%: vref_v=1.1233, tc=323.4, psrr=56.5
+  p_ra_l +20%: vref_v=1.3382, tc=253.1
+  p_rptat_l -20%: vref_v=1.3681, tc=320.0
+  p_rptat_l +20%: vref_v=1.1377, tc=278.1
+  p_r_w +20%: psrr=47.0
+  p_nbjt -20%: tc=179.9
+  p_nbjt +20%: vref_v=1.2786, tc=115.7
+  p_ln_tail +20%: psrr=50.9

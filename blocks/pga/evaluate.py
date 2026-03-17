@@ -71,7 +71,7 @@ XM3 d2 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 XM4 d1 d2 vdd vdd sky130_fd_pr__pfet_01v8 w=4u l=8u m=1
 
 * ─── Second stage: PMOS CS + NMOS current source load ───
-* L=8u for high gain, wider M6 for higher gm
+* Wide M6 for high gm and linearity
 XM6 out d1 vdd vdd sky130_fd_pr__pfet_01v8 w=16u l=8u m=1
 XM7 out nbias vss vss sky130_fd_pr__nfet_01v8 w=4u l=8u m=2
 

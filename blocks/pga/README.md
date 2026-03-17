@@ -89,7 +89,7 @@ Clean 10 Hz sinusoid, 1 Vpp output (0.4V to 1.4V). Harmonics >60 dB below fundam
 
 1. **Bias current**: Uses ideal current source. Needs bandgap/current mirror in integration.
 2. **Resistor values**: 10 MΩ poly resistors require ~5000 squares — very large area. Real implementation might use T-network or capacitive feedback to reduce resistor values.
-3. **Phase margin at G=1**: AC response shows some peaking near 800 kHz. While outside biosignal BW, this needs investigation in Phase B.
+3. **Phase margin at G=1**: Step response shows 69.6% overshoot at noise gain=2 (gain=1 inverting). This indicates ~20° phase margin. The ringing settles in 2.6 µs, which is irrelevant for biosignal bandwidth (150 Hz). Cause: M6 gate capacitance (W=16u L=8u ≈ 853 fF) comparable to Cc (1.6 pF), creating a parasitic pole. Tradeoff: reducing M6 W improves PM but worsens THD and DC gain. Could be improved with higher Cc at the cost of BW margin.
 4. **Output swing**: At G=128, max linear output swing is ±5.5 mV around VCM=0.9V. Only suitable for very small signals (EEG: 10-100 µV).
 5. **Power margin**: 12% margin at nominal (8.8 µW). Acceptable but not generous.
 6. **Gain switching**: Current design uses parameterized Rin. Real implementation needs transmission gates with on-resistance << Rin.

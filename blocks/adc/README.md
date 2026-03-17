@@ -220,3 +220,4 @@ Robust across full ±10% supply range.
 | 8 | DISC | - | W=4u input pair: lower noise but 3/15 PVT failures. Reverted. |
 | 9 | 1.00 | 6/6 | W_in=3u, W_n=2u: 27% faster, 40% better PVT, same yield |
 | 10 | 1.00 | 6/6 | Combined worst case (ss/-40C/1.62V): correct. Min CLK: 1ns. |
+| 11 | 1.00 | 6/6 | SPICE DAC verification, gm extraction, 1GHz max clock rate |

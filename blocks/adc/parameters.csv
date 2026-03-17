@@ -1,0 +1,8 @@
+parameter,value,min,max,unit,description
+wtail,4u,2u,10u,um,Tail NMOS width
+win,2u,1u,8u,um,Input pair NMOS width
+wn,1u,0.5u,4u,um,NMOS latch width
+wp,1u,0.5u,4u,um,PMOS latch/reset width
+lmin,0.15u,0.15u,1u,um,Channel length
+vref,1.8,1.2,1.8,V,Reference voltage (full scale)
+clk_period,100n,20n,1000n,ns,Comparator clock period

@@ -80,8 +80,16 @@ XMl1 outn cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
 XMl2 outp cmfb vdd vdd sky130_fd_pr__pfet_01v8 w=99u l=99u m=1
 
 * CMFB
-* CMFB: when output CM rises above vcm, raise cmfb to turn off PMOS loads
-Ecmfb cmfb 0 vol='0.9 + 100*((v(outp)+v(outn))/2 - v(vcm))'
+* CMFB: VCCS servo loop — numerically stable for transient
+* Sense output CM via high-value resistors
+Rcm1 outp cm_sense 100G
+Rcm2 outn cm_sense 100G
+* VCCS drives cmfb node: Gm*(Vcm_sense - Vcm_ref)
+* Positive: when output CM rises, cmfb rises, PMOS loads turn off
+Gcmfb 0 cmfb cm_sense vcm 1m
+* Compensation cap + bias resistor set DC operating point
+Ccmfb cmfb 0 10p
+Rcmfb cmfb 0 900k
 .ends ota
 """
 
@@ -186,9 +194,12 @@ Rbn vgn vcm 100G
 
     if include_chopper:
         netlist += f"""
-* Chopper clock at {FCHOP} Hz
-.model SW1 SW vt=0.5 vh=0.01 ron=100 roff=1G
-Vclk clk 0 pulse(0 1 0 1n 1n {T_CHOP/2} {T_CHOP})
+* Convergence options for transient with switching
+.options method=gear reltol=5e-3 abstol=1e-10 vntol=1e-4 gmin=1e-12 itl4=200
+
+* Chopper clock at {FCHOP} Hz (100ns transitions for stability)
+.model SW1 SW vt=0.5 vh=0.1 ron=100 roff=100Meg
+Vclk clk 0 pulse(0 1 0 100n 100n {T_CHOP/2} {T_CHOP})
 Eclkb clk_b 0 vol='1-v(clk)'
 
 * Input chopper
@@ -197,11 +208,13 @@ S1b inn inp_chop_n clk 0 SW1
 S1c inp inp_chop_n clk_b 0 SW1
 S1d inn inp_chop_p clk_b 0 SW1
 
-* Output chopper (demodulator)
-S2a voutp_ota vout_dem_p clk 0 SW1
-S2b voutn_ota vout_dem_n clk 0 SW1
-S2c voutp_ota vout_dem_n clk_b 0 SW1
-S2d voutn_ota vout_dem_p clk_b 0 SW1
+* Output chopper (demodulator) — buffered through small resistors
+Rbuf_p voutp_ota vop_buf 1k
+Rbuf_n voutn_ota von_buf 1k
+S2a vop_buf vout_dem_p clk 0 SW1
+S2b von_buf vout_dem_n clk 0 SW1
+S2c vop_buf vout_dem_n clk_b 0 SW1
+S2d von_buf vout_dem_p clk_b 0 SW1
 
 * Output LPF
 Rlpfp vout_dem_p voutp 10k
@@ -861,5 +874,175 @@ def main():
     return score, specs_met, measurements
 
 
+def tb8_pvt():
+    """PVT corner analysis: gain and noise across 5 corners × 3 temps."""
+    print("\n--- TB8: PVT Corner Analysis ---")
+    corners = ['tt', 'ss', 'ff', 'sf', 'fs']
+    temps = [-40, 27, 125]
+    results = {}
+    all_pass = True
+
+    for corner in corners:
+        for temp in temps:
+            extra = f"""
+Vinp inp 0 dc {VCM} ac 0.5
+Vinn inn 0 dc {VCM} ac -0.5
+"""
+            control = f"""
+.control
+ac dec 50 0.1 10Meg
+wrdata _pvt_{corner}_{temp}.dat v(voutp)-v(voutn)
+.endc
+"""
+            netlist = make_netlist(corner=corner, temp=temp,
+                                  include_chopper=False,
+                                  extra_sources=extra, control=control)
+            stdout, stderr, rc = run_ngspice(netlist, f'pvt_{corner}_{temp}')
+
+            data = read_wrdata(f'_pvt_{corner}_{temp}.dat')
+            if data is not None and len(data) > 5:
+                freqs = data[:, 0]
+                if data.shape[1] >= 3:
+                    mags = np.sqrt(data[:, 1]**2 + data[:, 2]**2)
+                else:
+                    mags = np.abs(data[:, 1])
+
+                lf_idx = np.argmin(np.abs(freqs - 1.0))
+                lf_gain = mags[lf_idx]
+                gain_db = 20 * math.log10(lf_gain) if lf_gain > 0 else -999
+
+                gain_3db = lf_gain / math.sqrt(2)
+                bw_idx = np.where(mags < gain_3db)[0]
+                bw = freqs[bw_idx[0]] if len(bw_idx) > 0 else freqs[-1]
+
+                # Check power
+                power = None
+                for line in stdout.splitlines():
+                    if 'i(vdd)' in line.lower() and '=' in line:
+                        try:
+                            val = float(line.split('=')[-1].strip().split()[0])
+                            power = abs(val) * VDD * 1e6
+                        except:
+                            pass
+
+                gain_pass = gain_db > 34
+                bw_pass = bw > 10000
+                corner_pass = gain_pass and bw_pass
+                if not corner_pass:
+                    all_pass = False
+
+                results[(corner, temp)] = {
+                    'gain_db': gain_db, 'bw': bw, 'power': power,
+                    'pass': corner_pass
+                }
+                status = 'PASS' if corner_pass else 'FAIL'
+                print(f"  {corner:2s} {temp:4d}C: gain={gain_db:.1f}dB, BW={bw:.0f}Hz [{status}]")
+            else:
+                results[(corner, temp)] = {'gain_db': -999, 'bw': 0, 'power': None, 'pass': False}
+                all_pass = False
+                print(f"  {corner:2s} {temp:4d}C: SIMULATION FAILED")
+
+    # Plot
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    for corner in corners:
+        gains = [results.get((corner, t), {}).get('gain_db', 0) for t in temps]
+        bws = [results.get((corner, t), {}).get('bw', 0) for t in temps]
+        ax1.plot(temps, gains, 'o-', label=corner)
+        ax2.plot(temps, [b/1000 for b in bws], 'o-', label=corner)
+
+    ax1.axhline(y=34, color='red', linestyle='--', label='34 dB target')
+    ax1.set_xlabel('Temperature (C)'); ax1.set_ylabel('Gain (dB)')
+    ax1.set_title('PVT: Gain'); ax1.legend(); ax1.grid(True, alpha=0.3)
+
+    ax2.axhline(y=10, color='red', linestyle='--', label='10 kHz target')
+    ax2.set_xlabel('Temperature (C)'); ax2.set_ylabel('Bandwidth (kHz)')
+    ax2.set_title('PVT: Bandwidth'); ax2.legend(); ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOT_DIR, 'pvt_summary.png'), dpi=150)
+    plt.close()
+
+    pvt_count = sum(1 for r in results.values() if r.get('pass'))
+    total = len(results)
+    print(f"\n  PVT: {pvt_count}/{total} corners pass")
+    print(f"  PVT result: {'PASS' if all_pass else 'FAIL'}")
+
+    return results, all_pass
+
+
+def tb9_monte_carlo():
+    """Sweep Cin mismatch from 0.01% to 1%, measure CMRR at each."""
+    print("\n--- TB9: Monte Carlo / Mismatch Sweep ---")
+    mismatches = [0.0001, 0.0003, 0.0005, 0.001, 0.003, 0.005, 0.01]
+    cmrr_results = {}
+
+    vcm_amp = 10e-3
+
+    for mm in mismatches:
+        extra = f"""
+Vinp inp 0 sin({VCM} {vcm_amp} 60 0 0)
+Vinn inn 0 sin({VCM} {vcm_amp} 60 0 0)
+"""
+        control = """
+.control
+tran 1u 200m 50m
+wrdata _mc_cmrr.dat v(voutp)-v(voutn)
+.endc
+"""
+        netlist = make_netlist(cin_mismatch=mm, include_chopper=True,
+                              extra_sources=extra, control=control)
+        stdout, stderr, rc = run_ngspice(netlist, f'mc_{mm}')
+
+        data = read_wrdata('_mc_cmrr.dat')
+        if data is not None and len(data) > 100:
+            time = data[:, 0]
+            vout_diff = data[:, 1]
+            vout_ac = vout_diff - np.mean(vout_diff)
+            N = len(vout_ac)
+            dt = np.mean(np.diff(time))
+            fft_vals = np.fft.rfft(vout_ac)
+            fft_mag = np.abs(fft_vals) * 2 / N
+            freqs = np.fft.rfftfreq(N, dt)
+
+            idx_60 = np.argmin(np.abs(freqs - 60))
+            vout_60 = fft_mag[idx_60]
+            cm_gain = vout_60 / vcm_amp if vcm_amp > 0 else 1e-15
+            cmrr = GAIN_NOMINAL / cm_gain if cm_gain > 0 else 999
+            cmrr_db = 20 * math.log10(cmrr) if cmrr > 0 else 0
+
+            cmrr_results[mm] = cmrr_db
+            status = 'PASS' if cmrr_db > 100 else 'FAIL'
+            print(f"  Mismatch={mm*100:.3f}%: CMRR={cmrr_db:.1f}dB [{status}]")
+        else:
+            cmrr_results[mm] = 0
+            print(f"  Mismatch={mm*100:.3f}%: SIMULATION FAILED")
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 6))
+    mm_pct = [m*100 for m in mismatches]
+    cmrr_vals = [cmrr_results.get(m, 0) for m in mismatches]
+    ax.semilogx(mm_pct, cmrr_vals, 'bo-', markersize=8)
+    ax.axhline(y=100, color='red', linestyle='--', label='100 dB target')
+    ax.set_xlabel('Cin Mismatch (%)')
+    ax.set_ylabel('CMRR at 60 Hz (dB)')
+    ax.set_title('CMRR vs Cin Mismatch (with 10 kHz chopping)')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(PLOT_DIR, 'monte_carlo.png'), dpi=150)
+    plt.close()
+
+    all_pass = all(v > 100 for v in cmrr_results.values())
+    print(f"\n  Monte Carlo: {'PASS' if all_pass else 'FAIL'}")
+    return cmrr_results, all_pass
+
+
 if __name__ == '__main__':
     score, specs_met, measurements = main()
+
+    if score >= 1.0:
+        print("\n\nPhase A complete. Running Phase B: PVT corners...")
+        pvt_results, pvt_pass = tb8_pvt()
+
+        print("\n\nRunning Phase C: Monte Carlo mismatch sweep...")
+        mc_results, mc_pass = tb9_monte_carlo()

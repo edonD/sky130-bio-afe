@@ -1,6 +1,6 @@
 # SKY130 Instrumentation Amplifier
 
-**Status: PHASE B — Score 1.0000 (6/6 specs pass), PVT 15/15 corners pass**
+**Status: PHASE B COMPLETE — Score 1.0000 (6/6 specs pass), PVT 15/15 corners pass**
 
 ## Architecture
 

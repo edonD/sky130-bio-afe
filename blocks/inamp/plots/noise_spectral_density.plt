@@ -9,7 +9,7 @@ set xrange [1e-01:1e+03]
 set mxtics 10
 set grid mxtics
 unset logscale y 
-set yrange [1.067700e-06:4.004803e-05]
+set yrange [1.003033e-06:3.972214e-05]
 #set xtics 1
 #set x2tics 1
 #set ytics 1

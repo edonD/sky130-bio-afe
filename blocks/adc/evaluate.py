@@ -469,32 +469,54 @@ def generate_mismatched_caps(n_bits, sigma_ratio=CAP_UNIT_SIGMA):
 # =============================================================================
 # SAR Algorithm (Python)
 # =============================================================================
+# VCM-dependent comparator offset model (from SPICE characterization)
+# Comparator works well between VCM=0.5V and VCM=1.1V (offset < 0.02mV)
+# Large offsets at extremes: < 0.4V or > 1.2V
+# Modeled as piecewise linear from SPICE data
+_VCM_OFFSET_TABLE = np.array([
+    [0.1, 2.3e-3], [0.3, 5.0e-3], [0.5, 0.02e-3], [0.7, -0.02e-3],
+    [0.9, 0.02e-3], [1.1, -0.02e-3], [1.3, -4.5e-3], [1.5, -5.0e-3],
+    [1.7, 5.0e-3]
+])
+
+def comp_offset_at_vcm(v_in, v_dac):
+    """Get comparator offset as a function of input common-mode voltage."""
+    vcm = (v_in + v_dac) / 2.0
+    return np.interp(vcm, _VCM_OFFSET_TABLE[:, 0], _VCM_OFFSET_TABLE[:, 1])
+
+
 def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,
-                cap_weights=None):
+                cap_weights=None, use_vcm_offset=False):
     """Simulate one SAR conversion.
     cap_weights: actual capacitor values (if None, ideal binary-weighted).
+    use_vcm_offset: if True, use VCM-dependent offset from SPICE characterization.
     Returns the digital output code (0 to 2^n - 1)."""
     if cap_weights is None:
-        # Ideal: each bit weight is exactly 2^k / 2^N
         code = 0
         for i in range(n_bits - 1, -1, -1):
             code |= (1 << i)
             v_dac = v_ref * code / (2**n_bits)
+            if use_vcm_offset:
+                offset = comp_offset_at_vcm(v_in, v_dac)
+            else:
+                offset = comp_offset
             noise = np.random.normal(0, comp_noise_rms) if comp_noise_rms > 0 else 0
-            if v_in < (v_dac + comp_offset + noise):
+            if v_in < (v_dac + offset + noise):
                 code &= ~(1 << i)
         return code
     else:
-        # With mismatch: DAC voltage depends on actual cap weights
-        c_total = np.sum(cap_weights) + 1.0  # +1 for dummy cap
+        c_total = np.sum(cap_weights) + 1.0
         bits = np.zeros(n_bits, dtype=int)
         for i in range(n_bits - 1, -1, -1):
-            bits[i] = 1  # Trial
-            # DAC voltage = sum(bit[k] * cap[k]) / C_total * VREF
+            bits[i] = 1
             v_dac = v_ref * np.sum(bits * cap_weights) / c_total
+            if use_vcm_offset:
+                offset = comp_offset_at_vcm(v_in, v_dac)
+            else:
+                offset = comp_offset
             noise = np.random.normal(0, comp_noise_rms) if comp_noise_rms > 0 else 0
-            if v_in < (v_dac + comp_offset + noise):
-                bits[i] = 0  # Clear
+            if v_in < (v_dac + offset + noise):
+                bits[i] = 0
         code = 0
         for i in range(n_bits):
             code |= (bits[i] << i)
@@ -502,7 +524,7 @@ def sar_convert(v_in, v_ref, n_bits, comp_offset=0.0, comp_noise_rms=0.0,
 
 
 def sar_convert_batch(v_in_array, v_ref, n_bits, comp_offset=0.0,
-                      comp_noise_rms=0.0, cap_weights=None):
+                      comp_noise_rms=0.0, cap_weights=None, use_vcm_offset=False):
     """Vectorized SAR conversion for an array of input voltages."""
     n = len(v_in_array)
     v_in = np.asarray(v_in_array, dtype=np.float64)
@@ -513,32 +535,39 @@ def sar_convert_batch(v_in_array, v_ref, n_bits, comp_offset=0.0,
         for i in range(n_bits - 1, -1, -1):
             codes |= (1 << i)
             v_dac = v_ref * codes / (2**n_bits)
+            if use_vcm_offset:
+                offset = np.array([comp_offset_at_vcm(vi, vd) for vi, vd
+                                   in zip(v_in, v_dac)])
+            else:
+                offset = comp_offset
             if comp_noise_rms > 0:
                 noise = np.random.normal(0, comp_noise_rms, n)
             else:
                 noise = 0
-            mask = v_in < (v_dac + comp_offset + noise)
+            mask = v_in < (v_dac + offset + noise)
             codes[mask] &= ~(1 << i)
         return codes
     else:
         # Mismatched DAC: vectorized over all inputs simultaneously
         c_total = np.sum(cap_weights) + 1.0
-        # Precompute weight for each bit: cap_weights[i] / c_total * v_ref
         bit_weights = cap_weights / c_total * v_ref
 
         bits = np.zeros((n_bits, n), dtype=np.int32)
         for i in range(n_bits - 1, -1, -1):
             bits[i, :] = 1  # Trial
-            # DAC voltage = sum of active bit weights
-            v_dac = np.dot(bits.T, bit_weights).flatten()  # shape (n,)
+            v_dac = np.dot(bits.T, bit_weights).flatten()
+            if use_vcm_offset:
+                offset = np.array([comp_offset_at_vcm(vi, vd) for vi, vd
+                                   in zip(v_in, v_dac)])
+            else:
+                offset = comp_offset
             if comp_noise_rms > 0:
                 noise = np.random.normal(0, comp_noise_rms, n)
             else:
                 noise = 0
-            mask = v_in < (v_dac + comp_offset + noise)
-            bits[i, mask] = 0  # Clear for samples where input < dac
+            mask = v_in < (v_dac + offset + noise)
+            bits[i, mask] = 0
 
-        # Convert bits to code
         codes = np.zeros(n, dtype=np.int32)
         for i in range(n_bits):
             codes += bits[i] * (1 << i)
@@ -1247,6 +1276,32 @@ def main():
         measurements['pvt_worst_delay_ns'] = max(r['delay_ns'] for r in pvt_results)
         measurements['pvt_wrong_decisions'] = sum(1 for r in pvt_results
                                                    if r['decision'] != 0)
+
+        # VCM-dependent offset impact test
+        print("\n--- VCM-Dependent Offset Impact ---")
+        n_pts_vcm = NCODES * 8
+        v_in_vcm = np.linspace(0, VREF, n_pts_vcm, endpoint=False)
+        # Without VCM offset
+        codes_no_vcm = sar_convert_batch(v_in_vcm, VREF, NBITS, comp_offset, 0,
+                                          caps_nominal, use_vcm_offset=False)
+        # With VCM offset
+        codes_vcm = sar_convert_batch(v_in_vcm, VREF, NBITS, comp_offset, 0,
+                                       caps_nominal, use_vcm_offset=True)
+        # Compare DNL
+        for label, codes_test in [("No VCM offset", codes_no_vcm),
+                                   ("With VCM offset", codes_vcm)]:
+            transitions = np.zeros(NCODES)
+            for k in range(NCODES):
+                idx = np.where(codes_test == k)[0]
+                transitions[k] = v_in_vcm[idx[0]] if len(idx) > 0 else np.nan
+            dnl_t = np.diff(transitions[1:]) / VLSB - 1.0
+            dnl_max_t = np.nanmax(np.abs(dnl_t))
+            missing_t = int(np.sum(np.isnan(transitions[1:-1])))
+            print(f"  {label}: DNL max={dnl_max_t:.3f} LSB, missing={missing_t}")
+        measurements['vcm_offset_dnl_max'] = float(np.nanmax(np.abs(
+            np.diff(np.array([v_in_vcm[np.where(codes_vcm == k)[0][0]]
+                              if len(np.where(codes_vcm == k)[0]) > 0
+                              else np.nan for k in range(NCODES)])[1:]) / VLSB - 1.0)))
 
         # Supply variation test
         print("\n--- Supply Variation (±10%) ---")

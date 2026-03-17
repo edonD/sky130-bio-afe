@@ -91,7 +91,8 @@ Output CM = 0.9V. With 1mV ECG × 62 gain = 62 mV differential swing. Output sta
 2. **Single-ended output** — CMRR limited to ~34 dB (one input has no feedback)
 3. **Small Cin (10pF)** — parasitic Cgs dominates, noise = 28 µVrms
 4. **NMOS loads with transistors** — 1/f noise from NMOS added 11-28 µVrms
-5. **Positive feedback** — initial design had Cfb on wrong input (d'oh)
+5. **Positive feedback** — initial design had Cfb on wrong input
+6. **Real PMOS tail current mirror** — tail MOSFET noise leaks through CMFB at cold corners (noise = 2.33 µVrms at sf/-40°C). A cascode tail or chopper-stabilized bias is needed for a real implementation.
 
 ## Experiment Log
 | Step | Score | Change |

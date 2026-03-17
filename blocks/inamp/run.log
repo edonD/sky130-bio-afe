@@ -210,14 +210,14 @@ vcm_sig#branch                               0
 vdd#branch                        -6.00002e-06
 
  Reference value :  0.00000e+00
- Reference value :  2.86450e-01
- Reference value :  5.72550e-01
- Reference value :  7.96562e-01
- Reference value :  1.06505e+00
- Reference value :  1.34475e+00
- Reference value :  1.49881e+00
- Reference value :  1.69035e+00
- Reference value :  1.97735e+00
+ Reference value :  2.79350e-01
+ Reference value :  5.67550e-01
+ Reference value :  7.78062e-01
+ Reference value :  1.04585e+00
+ Reference value :  1.32955e+00
+ Reference value :  1.48903e+00
+ Reference value :  1.66017e+00
+ Reference value :  1.93845e+00
 No. of Data Rows : 20077
 maxout = 9.269897e-01
 minout = 8.728777e-01

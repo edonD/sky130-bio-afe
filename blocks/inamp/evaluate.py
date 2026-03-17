@@ -37,7 +37,7 @@ OTA = r"""
 .param ifold  = 0.5u
 .param iload  = 3u
 
-* PMOS tail current source (ideal)
+* PMOS tail current source (ideal — real implementation is shared with bandgap block)
 Itail vdd tail {itail}
 
 * PMOS input differential pair — 6 parallel (effective WL=4752µm²)

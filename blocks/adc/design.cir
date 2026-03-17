@@ -12,7 +12,7 @@
 * When CLK=0: reset, outp=outn=VDD
 
 .subckt strongarm_comp vinp vinn clk outp outn vdd vss
-.param wp=1u wn=1u win=2u wtail=4u lmin=0.15u
+.param wp=1u wn=2u win=3u wtail=6u lmin=0.15u
 
 * Tail current source (NMOS, clocked)
 Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=wtail l=lmin

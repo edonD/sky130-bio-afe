@@ -117,11 +117,11 @@ VINP vinp 0 {vp}
 VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
-Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=6u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -187,11 +187,11 @@ VINP vinp 0 0.905
 VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
-Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=6u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -261,11 +261,11 @@ VINP vinp 0 0.901
 VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
-Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=6u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -359,11 +359,11 @@ VINP vinp 0 0.9
 VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
-Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=6u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
@@ -1032,11 +1032,11 @@ VINP vinp 0 0.901
 VINN vinn 0 0.9
 VCLK clk 0 PULSE(0 {VDD} 10n 0.5n 0.5n 49n 100n)
 
-Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=4u l=0.15u
-X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
-X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
-X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=1u l=0.15u
+Xtail  di     clk    vss  vss  sky130_fd_pr__nfet_01v8 w=6u l=0.15u
+X1     fn     vinp   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X2     fp     vinn   di   vss  sky130_fd_pr__nfet_01v8 w=3u l=0.15u
+X3     outp   outn   fn   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
+X4     outn   outp   fp   vss  sky130_fd_pr__nfet_01v8 w=2u l=0.15u
 X5     outp   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X6     outn   clk    vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u
 X7     outp   outn   vdd  vdd  sky130_fd_pr__pfet_01v8 w=1u l=0.15u

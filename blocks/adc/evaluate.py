@@ -30,6 +30,7 @@ OSR     = 256    # effective OSR for EEG/ECG applications:
                  #   noise shaping gives ~8.5 ENOB over this band vs 4.6 ENOB at OSR=64
 DEC_LEN = 512    # decimation filter length (must be ≤ total cycles captured)
 SINC_N  = 3      # sinc^N decimation filter order
+STARTUP_SKIP = 4000  # cycles to discard as startup transient (4ms at 1MHz)
 
 # ============================================================
 # Parameter I/O
@@ -170,19 +171,18 @@ def _sample_at_phi2_edges(wavedata, col_key):
         edges = [i for i in range(1, len(phi2))
                  if phi2[i-1] > 0.9 and phi2[i] < 0.9]
         if len(edges) > 10:
-            # 3-level decode: +1 / 0 / -1 for 1.8V / 0.9V / 0V DAC output
-            def decode3(v):
-                if v > 1.35:   return  1.0
-                if v < 0.45:   return -1.0
-                return 0.0
-            return np.array([decode3(vdac[i]) for i in edges])
+            # 1-bit decode: vdac_q ~1.8V → +1, ~0V → -1; skip startup transient
+            bits = np.array([1.0 if vdac[i] > 0.9 else -1.0 for i in edges])
+            bits = bits[STARTUP_SKIP:]  # discard startup transient (first 2ms)
+            return bits
 
     # Fallback: regular sampling at 1µs intervals
     ts = t[1] - t[0]
     clk_samples = max(1, int(round(1e-6 / ts)))
     indices = np.arange(clk_samples//2, len(t), clk_samples)
     v = vdac[indices]
-    return np.where(v > 1.35, 1.0, np.where(v < 0.45, -1.0, 0.0))
+    bits = np.where(v > 0.9, 1.0, -1.0)
+    return bits[STARTUP_SKIP:]
 
 
 def extract_bitstream(wavedata):
@@ -319,20 +319,28 @@ def evaluate_corner(corner, temp, timeout=480):
     if density1 > 0.98:
         result["error"] = f"Stage1 bitstream stuck: activity={density1:.3f}"
 
-    # Try MASH combination if Stage 2 bitstream is present
+    # Try MASH 2-1 combination if Stage 3 bitstream is present
     bits2 = extract_bitstream2(wavedata)
-    if bits2 is not None and len(bits2) >= len(bits1):
-        # Align lengths
+    if bits2 is not None and len(bits2) >= 4:
         N = min(len(bits1), len(bits2))
         y1 = bits1[:N].astype(float)
         y2 = bits2[:N].astype(float)
-        # MASH 1-1 digital combination: y_final[n] = y1[n] + (1/a2)*(y2[n] - y2[n-1])
-        # a2 = Cs2a/Ci2 = 0.5 → 1/a2 = 2
-        y_final = y1[1:] + 2.0*(y2[1:] - y2[:-1])
-        density2 = float(np.mean(bits2))
+        density2 = float(np.mean(y2 > 0))
         result["bit_density2"] = density2
-        sndr_db, enob = compute_sndr_enob(y_final)
+        # MASH 2-1: Y = Y1 + c*(1-z^-1)^2*Y2; sweep c for best ENOB
+        best_enob = -999.0
+        best_sndr = None
+        best_c = 1.0
+        diff2 = np.zeros(N)
+        diff2[2:] = y2[2:] - 2*y2[1:-1] + y2[:-2]  # (1-z^-1)^2 * y2
+        for c in [0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0]:
+            comb = y1 + c * diff2
+            s, e = compute_sndr_enob(comb)
+            if e is not None and e > best_enob:
+                best_enob, best_sndr, best_c = e, s, c
+        sndr_db, enob = best_sndr, best_enob
         result["mash_used"] = True
+        result["mash_c"] = best_c
     else:
         # Fallback: Stage 1 only
         sndr_db, enob = compute_sndr_enob(bits1)

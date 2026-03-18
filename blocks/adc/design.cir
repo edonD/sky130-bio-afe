@@ -45,7 +45,13 @@
 .param Cs_fb2 = 1e-12     ; 1pF DAC fb cap  (b2 = 1/4 = 0.25)
 .param Ci2    = 4e-12     ; 4pF integration cap
 
-* OTA sizing
+* OTA sizing — conservative gain boost v2 (STABLE)
+* Only 2nd-stage L increased 0.5→1µm; 1st stage/tail unchanged.
+* M5 balance: Ids_M5 = 2×(16/1)/(4/1)×25µA = 200µA
+*             Ids_M6 = (8/1)/(4/2)×50µA    = 200µA  ✓ balanced
+* gm5 = sqrt(2*65µ*(2*16/1)*200µ) ≈ 912µA/V → 1/gm5=1096Ω
+* A1 ≈ 26.7 V/V, A2 ≈ 28 V/V, A_total ≈ 748 V/V = 57.5 dB
+* Rz=2200 > 1/gm5=1096Ω → LHP zero at 36MHz → stable PM=107°
 .param p_wn_in   = 4e-6
 .param p_ln_in   = 0.5e-6
 .param p_wp_load = 4e-6
@@ -53,9 +59,9 @@
 .param p_wn_tail = 4e-6
 .param p_ln_tail = 2e-6
 .param p_wp_2nd  = 16e-6
-.param p_lp_2nd  = 0.5e-6
+.param p_lp_2nd  = 1e-6
 .param p_wn_2nd  = 8e-6
-.param p_ln_2nd  = 0.5e-6
+.param p_ln_2nd  = 1e-6
 .param p_cc      = 4e-12
 .param p_ibias   = 50e-6
 
@@ -176,87 +182,51 @@ Cs_fb2_cap  vcmbias2  cs2_fb_bot  {Cs_fb2}
 Xota2    vint2_in  vcmbias2  vint2_out  vdd  vss  vbn  ota
 Ci2_int  vint2_out  vint2_in  {Ci2}
 
+
 * ============================================================
-* 3-LEVEL (1.5-bit) COMPARATOR & S&H
+* 1-BIT COMPARATOR & S&H
 *
-* Two CMOS inverter chains with offset thresholds eliminate idle-tone
-* limit cycles by providing a dead zone [Vth_lo, Vth_hi] where the DAC
-* outputs VCM (no net feedback), breaking the SDM from limit cycling.
+* Simple CMOS inverter chain, Vth ≈ 0.9V (Wn=4µm, Wp=16µm balanced).
+* 4 stages (even) → cDc HIGH when vint2 > Vth (non-inverting after 4 inv).
+* DAC: vdac_q = VDD when vint2>0.9V, VSS when vint2<0.9V (sampled on phi1).
 *
-* comp_hi: Vth ≈ 1.0V  (Wn=4µm, Wp=36µm via m=3)  HIGH when vint2 > 1.0V
-* comp_lo: Vth ≈ 0.8V  (Wn=12µm via m=3, Wp=12µm) HIGH when vint2 > 0.8V
-*
-* DAC logic (phi1 = sample phase):
-*   vint2 > 1.0V → vdac = 1.8V  (+1: integrate down both stages)
-*   vint2 < 0.8V → vdac = 0.0V  (-1: integrate up both stages)
-*   dead zone    → vdac = VCM   ( 0: no net charge transfer)
-*
-* Evaluate: decode vdac_q > 1.35V → +1; < 0.45V → -1; else → 0
+* Evaluate: vdac_q > 0.9V → +1; < 0.9V → -1
 * ============================================================
 
-* --- comp_hi chain: Vth ≈ 1.0V (PMOS dominant: Wp=36µm via m=3) ---
-XMnAhi  cAhi  vint2_out  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpAhi  cAhi  vint2_out  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=3
-XMnBhi  cBhi  cAhi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpBhi  cBhi  cAhi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnChi  cChi  cBhi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpChi  cChi  cBhi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnDhi  cDhi  cChi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpDhi  cDhi  cChi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-* cDhi HIGH when vint2 > ~1.0V;  cChi = NOT(cDhi)
+* --- 4-inverter chain: cDc HIGH when vint2 > ~0.9V ---
+XMnAc  cAc  vint2_out  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6   l=150n  m=1
+XMpAc  cAc  vint2_out  vdd  vdd  sky130_fd_pr__pfet_01v8  w=16e-6  l=150n  m=1
+XMnBc  cBc  cAc        vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6   l=150n  m=1
+XMpBc  cBc  cAc        vdd  vdd  sky130_fd_pr__pfet_01v8  w=16e-6  l=150n  m=1
+XMnCc  cCc  cBc        vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6   l=150n  m=1
+XMpCc  cCc  cBc        vdd  vdd  sky130_fd_pr__pfet_01v8  w=16e-6  l=150n  m=1
+XMnDc  cDc  cCc        vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6   l=150n  m=1
+XMpDc  cDc  cCc        vdd  vdd  sky130_fd_pr__pfet_01v8  w=16e-6  l=150n  m=1
+* cDc HIGH when vint2 > ~0.9V;  cCc = NOT(cDc)
 
-* --- comp_lo chain: Vth ≈ 0.8V (NMOS dominant: Wn=12µm via m=3) ---
-XMnAlo  cAlo  vint2_out  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=3
-XMpAlo  cAlo  vint2_out  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnBlo  cBlo  cAlo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpBlo  cBlo  cAlo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnClo  cClo  cBlo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpClo  cClo  cBlo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnDlo  cDlo  cClo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpDlo  cDlo  cClo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-* cDlo HIGH when vint2 > ~0.8V;  cClo = NOT(cDlo)
+* --- AND gates: phi1 AND {cDc, cCc} to clock-gate S&H TGs ---
+* andhi = phi1 AND cDc  → TG drives VDD to vdac_q
+XMnNH1  nandhi  phi1    andhn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnNH2  andhn1  cDc     vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpNH1  nandhi  phi1    vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpNH2  nandhi  cDc     vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnAH   andhi   nandhi  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAH   andhi   nandhi  vdd     vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
 
-* --- Dead-zone logic: dz = cDlo AND NOT(cDhi) = cDlo AND cChi ---
-* NAND(cDlo, cChi) → INV → dz
-XMnND1  dznand  cDlo   dzn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMnND2  dzn1    cChi   vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpND1  dznand  cDlo   vdd   vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMpND2  dznand  cChi   vdd   vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMnDZ   dz      dznand vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpDZ   dz      dznand vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* andlo = phi1 AND cCc  → TG drives VSS to vdac_q
+XMnNL1  nandlo  phi1    andln1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnNL2  andln1  cCc     vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpNL1  nandlo  phi1    vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpNL2  nandlo  cCc     vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnAL   andlo   nandlo  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAL   andlo   nandlo  vdd     vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
 
-* --- AND gates: phi1 AND {cDhi, cClo, dz} to clock-gate the MUX TGs ---
-* and_hi = phi1 AND cDhi
-XMnNH1  nandhi  phi1  andhn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMnNH2  andhn1  cDhi  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpNH1  nandhi  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMpNH2  nandhi  cDhi  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMnAH   andhi   nandhi  vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpAH   andhi   nandhi  vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* --- 1-bit S&H: during phi1 one TG drives vdac_q; phi2 = hold ---
+Xtg_hi  vdd  vdac_q  andhi  nandhi  vdd  vss  tg
+Xtg_lo  vss  vdac_q  andlo  nandlo  vdd  vss  tg
+Ch_dac  vdac_q  vss  10e-12
+Rdac    vdac_q  vdac  1
 
-* and_lo = phi1 AND cClo  (cClo HIGH when vint2 < 0.8V)
-XMnNL1  nandlo  phi1  andln1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMnNL2  andln1  cClo  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpNL1  nandlo  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMpNL2  nandlo  cClo  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMnAL   andlo   nandlo  vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpAL   andlo   nandlo  vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-
-* and_mid = phi1 AND dz
-XMnNM1  nandmid  phi1  andmn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMnNM2  andmn1   dz    vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpNM1  nandmid  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMpNM2  nandmid  dz    vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
-XMnAM   andmid   nandmid  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpAM   andmid   nandmid  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-
-* --- 3-level S&H: during phi1 one TG drives vdac_q; phi2 = hold ---
-* Mutual exclusion guaranteed: cDhi=1→cDlo=1→cClo=0→andlo=0, dz=0→andmid=0
-Xtg_hi   vdd      vdac_q  andhi   nandhi   vdd  vss  tg
-Xtg_lo   vss      vdac_q  andlo   nandlo   vdd  vss  tg
-Xtg_mid  vcmbias  vdac_q  andmid  nandmid  vdd  vss  tg
-Ch_dac   vdac_q   vss  10e-12
-Rdac     vdac_q   vdac  1
 
 * ============================================================
 * Initial Conditions
@@ -274,36 +244,28 @@ Rdac     vdac_q   vdac  1
 .ic v(cs2_s_bot)  = 0.9
 .ic v(cs2_fb_bot) = 1.8
 
-* 3-level comparator ICs (vint2_out=0.9V at t=0):
-*   comp_hi: 0.9 < Vth_hi=1.0V → cDhi=LOW
-*   comp_lo: 0.9 > Vth_lo=0.8V → cDlo=HIGH
-*   dz = cDlo AND cChi = HIGH AND HIGH = HIGH → andmid fires in phi1 → vdac→VCM
-.ic v(cAhi) = 1.8
-.ic v(cBhi) = 0.0
-.ic v(cChi) = 1.8
-.ic v(cDhi) = 0.0
-.ic v(cAlo) = 0.0
-.ic v(cBlo) = 1.8
-.ic v(cClo) = 0.0
-.ic v(cDlo) = 1.8
-.ic v(dznand) = 0.0
-.ic v(dz)     = 1.8
+* 1-bit comparator ICs (vint2_out=0.9V → at threshold, set HIGH to start)
+*   cDc = 1.8 (HIGH = vint2>0.9V interpretation), cCc = 0.0
+*   phi1=0 at t=0 → andhi=0, andlo=0 → vdac_q holds initial value
+.ic v(cAc)   = 0.0
+.ic v(cBc)   = 1.8
+.ic v(cCc)   = 0.0
+.ic v(cDc)   = 1.8
 .ic v(nandhi) = 1.8
 .ic v(andhi)  = 0.0
 .ic v(nandlo) = 1.8
 .ic v(andlo)  = 0.0
-.ic v(nandmid)= 1.8
-.ic v(andmid) = 0.0
-.ic v(vdac_q) = 0.9
-.ic v(vdac)   = 0.9
+.ic v(vdac_q) = 1.8
+.ic v(vdac)   = 1.8
+
 
 * ============================================================
-* Transient: 10ms = 10000 clock cycles at fs=1MHz
+* Transient: 12ms clock cycles at fs=1MHz
 * ============================================================
 .options RSHUNT=1e10 RELTOL=0.002 ABSTOL=1e-13 VNTOL=2e-4 ITL4=300
 
 .control
-tran 20n 10m uic
+tran 20n 12m uic
 
 set wr_vecnames
 set wr_singlescale

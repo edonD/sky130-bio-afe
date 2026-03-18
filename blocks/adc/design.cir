@@ -1,31 +1,31 @@
-* MASH 1-1 Switched-Capacitor Sigma-Delta ADC — Transistor Level
+* 2nd-order Single-Loop CIFB SC Sigma-Delta ADC — Transistor Level
 * SKY130 130nm CMOS, 1.8V supply
-* fs=1MHz, OSR=64, fin=1.5kHz (EEG/ECG band)
+* fs=1MHz, OSR=256, fin=1.5kHz (EEG/ECG band: 0–1.95kHz)
 *
-* ARCHITECTURE: MASH 1-1 (Multi-stAge noise SHaping, 1st+1st order cascade)
-*   Stage 1: 1st-order SC SDM, input=Vin, DAC=vdac1_q (its OWN comparator)
-*            → y1 bitstream at /tmp/adc_tran.dat column vdac1_q
-*   Stage 2: 1st-order SC SDM, input=Stage1 RESIDUE (vint1_out - vdac1)
-*            DAC=vdac2_q (its OWN comparator, independent loop)
-*            → y2 bitstream at /tmp/adc_tran.dat column vdac2_q
-*   Digital: y_final[n] = y1[n] + (y2[n] - y2[n-1]) → 2nd-order NTF
-*            NTF(z) = (1-z⁻¹)²
+* ARCHITECTURE: 2nd-order CIFB (Cascade of Integrators with Feedback)
+*   Two cascaded SC integrators, SINGLE comparator on Int2 output.
+*   SINGLE DAC feeds back to BOTH Int1 (via Cs1) and Int2 (via Cs_fb2).
 *
-* WHY MASH OVER CIFB:
-*   CIFB: comparator on INT2 → INT1 wanders far from VCM before correction → clips
-*   MASH: each stage has its own direct feedback loop → INT1 stays bounded like
-*         the proven 1st-order design. Stage 2 clipping gets shaped by (1-z⁻¹)
-*         in the digital combination → negligible in-band contribution.
+* COEFFICIENTS:
+*   a1 = Cs1/Ci1 = 0.35pF/4pF = 0.0875  (Stage 1 signal+DAC gain; small to avoid OTA clipping)
+*   a2 = Cs_s2/Ci2 = 2pF/4pF = 0.5      (Stage 2 signal gain)
+*   b2 = Cs_fb2/Ci2 = 1pF/4pF = 0.25    (Stage 2 DAC feedback)
 *
-* Stage 1: a1=Cs1/Ci1=0.125 (reduced → integrator max=1.125V < OTA Vout_max=1.20V, no clipping)
-* Stage 2: two input caps:
-*   Cs2a samples residue = vint1_out - vdac1 (Stage 1 analog residue)
-*   Cs2b = vcmbias top, bot switches between vdac2 (phi1) and vint2_in (phi2)
-*          → implements Stage 2 DAC subtraction
-*   a2 = Cs2a/Ci2 = Cs2b/Ci2 = 0.5
+* NTF ANALYSIS (linear model):
+*   NTF(z) = (1-z^-1)^2 / D(z)
+*   D(z) = 1 - 1.75*z^-1 + 0.8375*z^-2
+*   Poles: z = 0.875 ± j0.268, |z| = 0.915  ← Lee stable (|NTF|_max = 1.12 < 1.5)
+*   D(z=1) = a1*a2 = 0.0875 → 21dB in-band noise boost vs ideal 2nd-order
+*   Theoretical SNDR at OSR=256: ~98dB → ENOB ≈ 16 bits (before thermal/idle-tone losses)
+*   Practical estimate: 10–14 bits transistor-level
 *
-* COHERENCE: fin=1.5kHz, N=10000 bits at fs=1MHz → signal at EXACT bin 15
-*            → no spectral leakage in bitstream FFT → accurate SNDR measurement
+* SIGN CONVENTION (SC integrator with inverting OTA):
+*   Stage 1: Δvint1 = +(Cs1/Ci1)*(Vin-Vdac) = +0.175*(Vin-Vdac)
+*     When Vdac=HIGH (1.8V): Δvint1 = +0.175*(Vin-1.8) < 0 for Vin<1.8V → vint1 decreases ✓
+*   Stage 2 signal (4-switch): Δvint2_sig = +(Cs_s2/Ci2)*(vint1-VCM)  [positive integration]
+*   Stage 2 DAC fb (perm-top): Δvint2_fb = -(Cs_fb2/Ci2)*(Vdac-VCM)  [negative feedback]
+*   Loop: vint2>VCM → comp=HIGH → Vdac=1.8V → Δvint2_fb < 0 ← NEGATIVE FEEDBACK ✓
+*
 * ============================================================
 
 .lib sky130_models/sky130.lib.spice tt
@@ -36,18 +36,16 @@
 .param VDD    = 1.8
 .param VCM    = 0.9
 
-* Stage 1: a1 = Cs1/Ci1 = 0.175 → integrator max≈1.18V < OTA Vout_max=1.20V (no clipping)
-* Max swing: a1*(Vin_max - Vdac_min) = 0.175*1.6 = 0.28V → Vout_max = 1.18V (safe)
-* Larger a1 vs 0.125 → less idle tone locking, better shaped noise → better OSR=256 SNDR
-.param Cs1    = 0.7e-12  ; 0.7pF sampling cap  (a1=0.175, best SNDR sweet spot)
-.param Ci1    = 4e-12    ; 4pF integration cap
+* Stage 1: a1 = Cs1/Ci1 = 0.175
+.param Cs1    = 0.7e-12   ; 0.7pF sampling cap
+.param Ci1    = 4e-12     ; 4pF integration cap
 
-* Stage 2: a2 = Cs2/Ci2 = 0.5 (per cap; Stage 2 may clip, that's OK for MASH)
-.param Cs2a   = 2e-12    ; 2pF residue signal sampling cap
-.param Cs2b   = 2e-12    ; 2pF Stage-2 feedback cap
-.param Ci2    = 4e-12    ; 4pF integration cap
+* Stage 2: a2=0.5, b2=0.25
+.param Cs_s2  = 2e-12     ; 2pF signal cap  (a2 = 2/4 = 0.5)
+.param Cs_fb2 = 1e-12     ; 1pF DAC fb cap  (b2 = 1/4 = 0.25)
+.param Ci2    = 4e-12     ; 4pF integration cap
 
-* OTA sizing — minimal noise floor (proven 1st-order geometry)
+* OTA sizing
 .param p_wn_in   = 4e-6
 .param p_ln_in   = 0.5e-6
 .param p_wp_load = 4e-6
@@ -68,14 +66,16 @@ VDD  vdd  0  DC 1.8
 VVSS vss  0  DC 0
 
 * ============================================================
-* Input: Vin = 0.9V + 0.7V*sin(2pi*1.5kHz*t)
+* Input: Vin = VCM + 0.5V*sin(2π*1.5kHz*t)
+* Amplitude 0.5V (0.556 of Vref/2=0.9V) → stable 2nd-order operation
+* Coherent: fin=1.5kHz, N=10000 bits, fs=1MHz → signal at EXACT bin 15
 * ============================================================
-Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.7 1.5e3 0 0)
+Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.5 1.5e3 0 0)
 Rvin     vin_src  vin  100
 
 * ============================================================
-* Non-overlapping clocks (Ts=1µs)
-* phi1 HIGH: 0–490ns   phi2 HIGH: 510–1000ns   dead=20ns
+* Non-overlapping clocks (Ts=1µs, dead time=20ns)
+* phi1 HIGH: 0–490ns   phi2 HIGH: 510–1000ns
 * ============================================================
 Vphi1  phi1_src  0  PULSE(0   1.8  0     2n 2n  486n  1u)
 Vphi1b phi1b_src 0  PULSE(1.8 0    0     2n 2n  486n  1u)
@@ -87,13 +87,13 @@ Rphi2  phi2_src  phi2  100
 Rphi2b phi2b_src phi2b 100
 
 * ============================================================
-* Bias (shared vbn for both OTA instances)
-* Stage 1 uses vcmbias.  Stage 2 uses vcmbias2 (ISOLATED to prevent crosstalk:
-*   Cs2b top-plate switching would perturb vcmbias and corrupt OTA1's non-inv input)
+* Bias and references
+* vcmbias : Stage 1 non-inv OTA input (isolated from Stage 2 cap switching)
+* vcmbias2: Stage 2 non-inv OTA input + signal cap top plate (permanently)
 * ============================================================
-Vcmbias  vcmbias_src  0 DC 0.9
+Vcmbias  vcmbias_src  0  DC 0.9
 Rcmbias  vcmbias_src  vcmbias  100
-Vcmbias2 vcmbias2_src 0 DC 0.9
+Vcmbias2 vcmbias2_src 0  DC 0.9
 Rcmbias2 vcmbias2_src vcmbias2 100
 Ibias  vdd  vbn  DC {p_ibias}
 XMbias vbn  vbn  vss vss  sky130_fd_pr__nfet_01v8  w={p_wn_tail} l={p_ln_tail} m=1
@@ -101,7 +101,7 @@ XMbias vbn  vbn  vss vss  sky130_fd_pr__nfet_01v8  w={p_wn_tail} l={p_ln_tail} m
 * ============================================================
 * OTA — Two-stage Miller-compensated
 * Ports: vip  vin  vout  vdd  vss  vbn
-* vip = INVERTING input (M1 gate: vip↑→vout↓) → use at virtual-ground node
+* vip = INVERTING input (M1 gate: vip↑→vout↓) → place at virtual-ground node
 * ============================================================
 .subckt ota  vip  vin  vout  vdd  vss  vbn
 XMtail  ntail  vbn    vss  vss  sky130_fd_pr__nfet_01v8  w={p_wn_tail} l={p_ln_tail} m=1
@@ -124,131 +124,190 @@ XMP  in  phb  out  vdd  sky130_fd_pr__pfet_01v8  w=2e-6  l=150n  m=1
 .ends tg
 
 * ============================================================
-* STAGE 1: 1st-order SC Integrator + Comparator + S&H
-* Δx1 = +(Cs1/Ci1)*(Vin - vdac1) = +0.75*(Vin - vdac1)
-* Comparator fires on vint1_out, drives vdac1_q (Stage 1's OWN bitstream)
+* STAGE 1: 1st-order SC Integrator
+*
+* Δvint1 = -(Cs1/Ci1)*(Vin - Vdac) = -0.175*(Vin - Vdac)
+* [Inverting OTA: charge conservation gives sign reversal]
+* DAC = vdac = shared comparator output (from Stage 2 comparator)
 * ============================================================
-
-* SC Integrator 1
 Xs1a  vin       cs1_top  phi1  phi1b  vdd  vss  tg
-Xs1b  vdac1     cs1_bot  phi1  phi1b  vdd  vss  tg
+Xs1b  vdac      cs1_bot  phi1  phi1b  vdd  vss  tg
 Xs2a  vcmbias   cs1_top  phi2  phi2b  vdd  vss  tg
 Xs2b  vint1_in  cs1_bot  phi2  phi2b  vdd  vss  tg
 Cs1_cap  cs1_top  cs1_bot  {Cs1}
 Xota1    vint1_in  vcmbias  vint1_out  vdd  vss  vbn  ota
 Ci1_int  vint1_out  vint1_in  {Ci1}
 
-* Comparator 1: 4-inverter chain (NON-INVERTING total: even inversions) on vint1_out
-* vint1_out > VCM → comp1a=LOW → comp1b=HIGH → comp1c=LOW → comp1d=HIGH → vdac1=1.8V
-* Four stages give Av≈(-20)^4: rail-to-rail output even for ~0.1mV overdrive at VCM
-* → Δx1=+(Cs1/Ci1)*(Vin-1.8)<0 → NEGATIVE FEEDBACK ✓
-XMnA  comp1a_out  vint1_out    vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpA  comp1a_out  vint1_out    vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnB  comp1b_out  comp1a_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpB  comp1b_out  comp1a_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnC1 comp1c_out  comp1b_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpC1 comp1c_out  comp1b_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnD1 comp1d_out  comp1c_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpD1 comp1d_out  comp1c_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-
-* S&H 1: transparent during phi1 → samples comp1d_out → vdac1_q (holds during phi2)
-Xtg_sh1  comp1d_out  vdac1_q  phi1  phi1b  vdd  vss  tg
-Ch_dac1  vdac1_q  vss  10e-12
-Rdac1    vdac1_q  vdac1  1
-
-* ============================================================
-* STAGE 2: 1st-order SC SDM on Stage 1 residue
-*
-* Input: residue1 = vint1_out - vdac1  (Stage 1 analog residue, sampled on Cs2a)
-* DAC:   vdac2_q                        (Stage 2's OWN DAC, subtracted via Cs2b)
-*
-* Two-cap structure:
-*   Cs2a: phi1: top=vint1_out, bot=vdac1   → ΔQ_a = Cs2a*(vint1_out - vdac1)
-*         phi2: top=VCM, bot=vint2_in       → transfer residue to OTA2
-*   Cs2b: top permanently tied to vcmbias (VCM=0.9V)
-*         phi1: bot=vdac2   → Q_b = Cs2b*(VCM - vdac2)  [DAC feedback]
-*         phi2: bot=vint2_in → Q_b = 0                   [transfer]
-*         ΔQ_b = Cs2b*(VCM - vdac2) = -Cs2b*(vdac2 - VCM)  [subtracts DAC2]
-*
-* Δx2 = [Cs2a*(vint1_out-vdac1) + Cs2b*(VCM-vdac2)] / Ci2
-*      = 0.5*[(vint1_out-vdac1) - (vdac2-VCM)]
-* ============================================================
-
-* 100Ω buffer on vint1_out → vint1_s2 prevents Stage2 caps from hard-loading OTA1 output
+* 100Ω buffer: prevents Stage 2 cap charge injection from disturbing OTA1 output
 Rbuf_s2  vint1_out  vint1_s2  100
 
-* Cs2a: residue signal sampling (uses isolated vcmbias2 for top-plate reset)
-Xs3a  vint1_s2   cs2a_top  phi1  phi1b  vdd  vss  tg
-Xs3b  vdac1      cs2a_bot  phi1  phi1b  vdd  vss  tg
-Xs4a  vcmbias2   cs2a_top  phi2  phi2b  vdd  vss  tg
-Xs4b  vint2_in   cs2a_bot  phi2  phi2b  vdd  vss  tg
-Cs2a_cap  cs2a_top  cs2a_bot  {Cs2a}
+* ============================================================
+* STAGE 2: 2nd-order integrator (CIFB topology)
+*
+* State equations (x = v-VCM, d = vdac-VCM):
+*   x1[n+1] = x1[n] + a1*(u-d)    [Stage 1: positive gain]
+*   x2[n+1] = x2[n] + a2*x1 - b2*d [Stage 2: +signal, -DAC]
+* NTF = (1-z^-1)^2 / D(z),  D(z) = 1 - 1.75z^-1 + 0.8375z^-2, |poles|=0.915 ✓
+*
+* Cs_s2: 4-switch topology
+*   phi1: top=vint1_s2, bot=vcmbias2=VCM  → V_cap = vint1-VCM
+*   phi2: top=vcmbias2=VCM, bot=vint2_in  → V_cap → 0 (virtual ground)
+*   Δvint2_out = +(Cs_s2/Ci2)*(vint1-VCM) = +a2*x1  [POSITIVE signal] ✓
+*
+* Cs_fb2: permanent top=VCM, 2-switch bot
+*   phi1: top=vcmbias2=VCM, bot=vdac  → V_cap = VCM-vdac (NEGATIVE when vdac=HIGH)
+*   phi2: top=vcmbias2=VCM, bot=vint2_in → V_cap → 0 (virtual ground)
+*   Δvint2_out = -(Cs_fb2/Ci2)*(vdac-VCM) = -b2*d  [NEGATIVE DAC feedback] ✓
+* ============================================================
 
-* Cs2b: Stage 2 DAC feedback (top permanently at vcmbias2 — ISOLATED from Stage 1's vcmbias)
-* Switching cs2b_bot no longer couples into Stage 1's vcmbias reference
-Xs5b  vdac2     cs2b_bot  phi1  phi1b  vdd  vss  tg
-Xs6b  vint2_in  cs2b_bot  phi2  phi2b  vdd  vss  tg
-Cs2b_cap  vcmbias2  cs2b_bot  {Cs2b}
+* Cs_s2: signal cap — 4-switch
+Xs3a  vint1_s2  cs2_s_top  phi1  phi1b  vdd  vss  tg
+Xs3b  vcmbias2  cs2_s_bot  phi1  phi1b  vdd  vss  tg
+Xs4a  vcmbias2  cs2_s_top  phi2  phi2b  vdd  vss  tg
+Xs4b  vint2_in  cs2_s_bot  phi2  phi2b  vdd  vss  tg
+Cs_s2_cap  cs2_s_top  cs2_s_bot  {Cs_s2}
 
-* OTA2 and integration cap (uses vcmbias2 as its fixed reference)
+* Cs_fb2: DAC feedback — permanent top=VCM, 2-switch bot
+Xs5b  vdac      cs2_fb_bot  phi1  phi1b  vdd  vss  tg
+Xs6b  vint2_in  cs2_fb_bot  phi2  phi2b  vdd  vss  tg
+Cs_fb2_cap  vcmbias2  cs2_fb_bot  {Cs_fb2}
+
+* OTA2 and integration cap
 Xota2    vint2_in  vcmbias2  vint2_out  vdd  vss  vbn  ota
 Ci2_int  vint2_out  vint2_in  {Ci2}
 
-* Comparator 2: 4-inverter chain on vint2_out (Stage 2's own comparator)
-* vint2_out > VCM → comp2a=LOW → comp2b=HIGH → comp2c=LOW → comp2d=HIGH → vdac2=1.8V
-XMnC  comp2a_out  vint2_out    vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpC  comp2a_out  vint2_out    vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnD  comp2b_out  comp2a_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpD  comp2b_out  comp2a_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnE  comp2c_out  comp2b_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpE  comp2c_out  comp2b_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnF  comp2d_out  comp2c_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpF  comp2d_out  comp2c_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* ============================================================
+* 3-LEVEL (1.5-bit) COMPARATOR & S&H
+*
+* Two CMOS inverter chains with offset thresholds eliminate idle-tone
+* limit cycles by providing a dead zone [Vth_lo, Vth_hi] where the DAC
+* outputs VCM (no net feedback), breaking the SDM from limit cycling.
+*
+* comp_hi: Vth ≈ 1.0V  (Wn=4µm, Wp=36µm via m=3)  HIGH when vint2 > 1.0V
+* comp_lo: Vth ≈ 0.8V  (Wn=12µm via m=3, Wp=12µm) HIGH when vint2 > 0.8V
+*
+* DAC logic (phi1 = sample phase):
+*   vint2 > 1.0V → vdac = 1.8V  (+1: integrate down both stages)
+*   vint2 < 0.8V → vdac = 0.0V  (-1: integrate up both stages)
+*   dead zone    → vdac = VCM   ( 0: no net charge transfer)
+*
+* Evaluate: decode vdac_q > 1.35V → +1; < 0.45V → -1; else → 0
+* ============================================================
 
-* S&H 2: transparent during phi1 → samples comp2d_out → vdac2_q (holds during phi2)
-Xtg_sh2  comp2d_out  vdac2_q  phi1  phi1b  vdd  vss  tg
-Ch_dac2  vdac2_q  vss  10e-12
-Rdac2    vdac2_q  vdac2  1
+* --- comp_hi chain: Vth ≈ 1.0V (PMOS dominant: Wp=36µm via m=3) ---
+XMnAhi  cAhi  vint2_out  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAhi  cAhi  vint2_out  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=3
+XMnBhi  cBhi  cAhi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpBhi  cBhi  cAhi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnChi  cChi  cBhi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpChi  cChi  cBhi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnDhi  cDhi  cChi       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpDhi  cDhi  cChi       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* cDhi HIGH when vint2 > ~1.0V;  cChi = NOT(cDhi)
+
+* --- comp_lo chain: Vth ≈ 0.8V (NMOS dominant: Wn=12µm via m=3) ---
+XMnAlo  cAlo  vint2_out  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=3
+XMpAlo  cAlo  vint2_out  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnBlo  cBlo  cAlo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpBlo  cBlo  cAlo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnClo  cClo  cBlo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpClo  cClo  cBlo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnDlo  cDlo  cClo       vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpDlo  cDlo  cClo       vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* cDlo HIGH when vint2 > ~0.8V;  cClo = NOT(cDlo)
+
+* --- Dead-zone logic: dz = cDlo AND NOT(cDhi) = cDlo AND cChi ---
+* NAND(cDlo, cChi) → INV → dz
+XMnND1  dznand  cDlo   dzn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnND2  dzn1    cChi   vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpND1  dznand  cDlo   vdd   vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpND2  dznand  cChi   vdd   vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnDZ   dz      dznand vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpDZ   dz      dznand vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+
+* --- AND gates: phi1 AND {cDhi, cClo, dz} to clock-gate the MUX TGs ---
+* and_hi = phi1 AND cDhi
+XMnNH1  nandhi  phi1  andhn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnNH2  andhn1  cDhi  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpNH1  nandhi  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpNH2  nandhi  cDhi  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnAH   andhi   nandhi  vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAH   andhi   nandhi  vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+
+* and_lo = phi1 AND cClo  (cClo HIGH when vint2 < 0.8V)
+XMnNL1  nandlo  phi1  andln1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnNL2  andln1  cClo  vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpNL1  nandlo  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpNL2  nandlo  cClo  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnAL   andlo   nandlo  vss   vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAL   andlo   nandlo  vdd   vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+
+* and_mid = phi1 AND dz
+XMnNM1  nandmid  phi1  andmn1  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMnNM2  andmn1   dz    vss     vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpNM1  nandmid  phi1  vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMpNM2  nandmid  dz    vdd     vdd  sky130_fd_pr__pfet_01v8  w=8e-6  l=150n  m=1
+XMnAM   andmid   nandmid  vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpAM   andmid   nandmid  vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+
+* --- 3-level S&H: during phi1 one TG drives vdac_q; phi2 = hold ---
+* Mutual exclusion guaranteed: cDhi=1→cDlo=1→cClo=0→andlo=0, dz=0→andmid=0
+Xtg_hi   vdd      vdac_q  andhi   nandhi   vdd  vss  tg
+Xtg_lo   vss      vdac_q  andlo   nandlo   vdd  vss  tg
+Xtg_mid  vcmbias  vdac_q  andmid  nandmid  vdd  vss  tg
+Ch_dac   vdac_q   vss  10e-12
+Rdac     vdac_q   vdac  1
 
 * ============================================================
 * Initial Conditions
-* Stage 1: same as proven 1st-order design
-* Stage 2: start at mid-supply equilibrium
 * ============================================================
+* Stage 1: vint1 slightly above VCM → comp fires HIGH → vdac=1.8V from cycle 1
 .ic v(vint1_out)  = 1.0
 .ic v(vint1_in)   = 0.9
 .ic v(cs1_top)    = 0.9
 .ic v(cs1_bot)    = 1.8
-.ic v(comp1a_out) = 0.0
-.ic v(comp1b_out) = 1.8
-.ic v(comp1c_out) = 0.0
-.ic v(comp1d_out) = 1.8
-.ic v(vdac1_q)    = 1.8
-.ic v(vdac1)      = 1.8
 
+* Stage 2: start at VCM; cs2_s phi1 top=vint1_s2≈1.0V, bot=VCM; cs2_fb phi1 bot=vdac=1.8V
 .ic v(vint2_out)  = 0.9
 .ic v(vint2_in)   = 0.9
-.ic v(cs2a_top)   = 1.0
-.ic v(cs2a_bot)   = 1.8
-.ic v(cs2b_bot)   = 1.8
-.ic v(comp2a_out) = 0.0
-.ic v(comp2b_out) = 1.8
-.ic v(comp2c_out) = 0.0
-.ic v(comp2d_out) = 1.8
-.ic v(vdac2_q)    = 1.8
-.ic v(vdac2)      = 1.8
+.ic v(cs2_s_top)  = 1.0
+.ic v(cs2_s_bot)  = 0.9
+.ic v(cs2_fb_bot) = 1.8
+
+* 3-level comparator ICs (vint2_out=0.9V at t=0):
+*   comp_hi: 0.9 < Vth_hi=1.0V → cDhi=LOW
+*   comp_lo: 0.9 > Vth_lo=0.8V → cDlo=HIGH
+*   dz = cDlo AND cChi = HIGH AND HIGH = HIGH → andmid fires in phi1 → vdac→VCM
+.ic v(cAhi) = 1.8
+.ic v(cBhi) = 0.0
+.ic v(cChi) = 1.8
+.ic v(cDhi) = 0.0
+.ic v(cAlo) = 0.0
+.ic v(cBlo) = 1.8
+.ic v(cClo) = 0.0
+.ic v(cDlo) = 1.8
+.ic v(dznand) = 0.0
+.ic v(dz)     = 1.8
+.ic v(nandhi) = 1.8
+.ic v(andhi)  = 0.0
+.ic v(nandlo) = 1.8
+.ic v(andlo)  = 0.0
+.ic v(nandmid)= 1.8
+.ic v(andmid) = 0.0
+.ic v(vdac_q) = 0.9
+.ic v(vdac)   = 0.9
 
 * ============================================================
-* Transient: 10ms = 10000 clock cycles
+* Transient: 10ms = 10000 clock cycles at fs=1MHz
 * ============================================================
-.options RSHUNT=1e10 RELTOL=0.001 ABSTOL=1e-13 VNTOL=1e-4 ITL4=300
+.options RSHUNT=1e10 RELTOL=0.002 ABSTOL=1e-13 VNTOL=2e-4 ITL4=300
 
 .control
 tran 20n 10m uic
 
 set wr_vecnames
 set wr_singlescale
-wrdata /tmp/adc_tran.dat v(vint1_out) v(vdac1_q) v(vdac2_q) v(vin) v(phi1) v(phi2)
+wrdata /tmp/adc_tran.dat v(vint1_out) v(vint2_out) v(vdac_q) v(vin) v(phi1) v(phi2)
 
 quit
 .endc

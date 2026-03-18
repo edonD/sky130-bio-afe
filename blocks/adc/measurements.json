@@ -1,22 +1,21 @@
 {
-  "score": 0.0,
-  "enob_tt_27": 6.356459709109842,
-  "enob_pvt_min": 5.650656040548009,
-  "sndr_tt_27": 40.025887448841246,
+  "score": 0.5631097812036862,
+  "enob_tt_27": 12.067988030833176,
+  "enob_pvt_min": 5.997747320986624,
+  "sndr_tt_27": 74.40928794561572,
   "n_bits_tt": 10000,
   "pvt_results": [
     {
       "corner": "tt",
       "temp": 27,
       "ngspice_ok": true,
-      "sim_time_s": 229.6153564453125,
-      "enob": 6.356459709109842,
-      "sndr_db": 40.025887448841246,
+      "sim_time_s": 262.0333595275879,
+      "enob": 12.067988030833176,
+      "sndr_db": 74.40928794561572,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4998,
-      "bit_density2": 0.4838,
-      "mash_used": true
+      "bit_density": 0.4347,
+      "mash_used": false
     },
     {
       "corner": "ff",
@@ -26,46 +25,43 @@
       "enob": null,
       "sndr_db": null,
       "n_bits": 0,
-      "error": "TIMEOUT\nNote: Compatibility modes selected: hs a\n\nWarning: m=xx on .subckt line will override multiplier m hierarchy!\n\n\nCircuit: * mash 1-1 switched-capacitor sigma-delta adc \u2014 transistor level\n\nDoing analysis at TEMP = -40.000000 and TNOM = 27.000000\n\nUsing SPARSE 1.3 as Direct Linear Solver\nUsing transient initial conditions\n"
+      "error": "TIMEOUT\nNote: Compatibility modes selected: hs a\n\nWarning: m=xx on .subckt line will override multiplier m hierarchy!\n\n\nCircuit: * 2nd-order single-loop cifb sc sigma-delta adc \u2014 transistor level\n\nDoing analysis at TEMP = -40.000000 and TNOM = 27.000000\n\nUsing SPARSE 1.3 as Direct Linear Solver\nUsing transient initial conditions\n"
     },
     {
       "corner": "ff",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 254.40474128723145,
-      "enob": 5.650656040548009,
-      "sndr_db": 35.77694936409901,
+      "sim_time_s": 261.01391649246216,
+      "enob": 8.755478061366816,
+      "sndr_db": 54.46797792942823,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4846,
-      "bit_density2": 0.5191,
-      "mash_used": true
+      "bit_density": 0.3509,
+      "mash_used": false
     },
     {
       "corner": "ss",
       "temp": -40,
       "ngspice_ok": true,
-      "sim_time_s": 220.54942321777344,
-      "enob": 7.414621323513434,
-      "sndr_db": 46.39602036755087,
+      "sim_time_s": 296.4158172607422,
+      "enob": 5.997747320986624,
+      "sndr_db": 37.86643887233947,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.5007,
-      "bit_density2": 0.4954,
-      "mash_used": true
+      "bit_density": 0.7587,
+      "mash_used": false
     },
     {
       "corner": "ss",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 208.77993154525757,
-      "enob": 6.66648117047455,
-      "sndr_db": 41.892216646256784,
+      "sim_time_s": 241.2351381778717,
+      "enob": 10.708852643545642,
+      "sndr_db": 66.22729291414477,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.5004,
-      "bit_density2": 0.5078,
-      "mash_used": true
+      "bit_density": 0.3796,
+      "mash_used": false
     }
   ]
 }

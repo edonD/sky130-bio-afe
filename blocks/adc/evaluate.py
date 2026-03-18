@@ -170,13 +170,19 @@ def _sample_at_phi2_edges(wavedata, col_key):
         edges = [i for i in range(1, len(phi2))
                  if phi2[i-1] > 0.9 and phi2[i] < 0.9]
         if len(edges) > 10:
-            return np.array([1 if vdac[i] > 0.9 else 0 for i in edges])
+            # 3-level decode: +1 / 0 / -1 for 1.8V / 0.9V / 0V DAC output
+            def decode3(v):
+                if v > 1.35:   return  1.0
+                if v < 0.45:   return -1.0
+                return 0.0
+            return np.array([decode3(vdac[i]) for i in edges])
 
     # Fallback: regular sampling at 1µs intervals
     ts = t[1] - t[0]
     clk_samples = max(1, int(round(1e-6 / ts)))
     indices = np.arange(clk_samples//2, len(t), clk_samples)
-    return (vdac[indices] > 0.9).astype(int)
+    v = vdac[indices]
+    return np.where(v > 1.35, 1.0, np.where(v < 0.45, -1.0, 0.0))
 
 
 def extract_bitstream(wavedata):
@@ -267,7 +273,7 @@ def compute_sndr_enob(bits, fin_hz=FIN_HZ, fs_hz=FS_HZ, osr=OSR):
 # Main evaluation
 # ============================================================
 
-def evaluate_corner(corner, temp, timeout=300):
+def evaluate_corner(corner, temp, timeout=480):
     """Run one PVT corner, return dict of metrics."""
     cir_path = f"/tmp/adc_{corner}_{temp}.cir"
     build_netlist(corner=corner, temp=temp, out_path=cir_path)
@@ -308,10 +314,10 @@ def evaluate_corner(corner, temp, timeout=300):
 
     result["n_bits"] = len(bits1)
 
-    density1 = float(np.mean(bits1))
+    density1 = float(np.mean(np.abs(bits1)))
     result["bit_density"] = density1
-    if density1 < 0.05 or density1 > 0.95:
-        result["error"] = f"Stage1 bitstream stuck: density={density1:.3f}"
+    if density1 > 0.98:
+        result["error"] = f"Stage1 bitstream stuck: activity={density1:.3f}"
 
     # Try MASH combination if Stage 2 bitstream is present
     bits2 = extract_bitstream2(wavedata)

@@ -72,12 +72,15 @@ VDD  vdd  0  DC 1.8
 VVSS vss  0  DC 0
 
 * ============================================================
-* Input: Vin = VCM + 0.5V*sin(2π*1.5kHz*t)
-* Amplitude 0.5V (0.556 of Vref/2=0.9V) → stable 2nd-order operation
-* Coherent: fin=1.5kHz, N=10000 bits, fs=1MHz → signal at EXACT bin 15
+* Input: Vin = VCM + 0.5V*sin(2π*1.5kHz*t) + 30mV*sin(2π*100kHz*t)
+* Main: 0.5V amplitude, coherent at fin=1.5kHz (bin 12 for N=8000)
+* Dither: 30mV at 100kHz (out-of-band: bin 800 >> inband_cutoff=15)
+*   → breaks SDM idle tones at bin 1, reduces low-freq limit cycles
+*   → 100kHz is noise-shaped out of band, no in-band power increase
 * ============================================================
-Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.5 1.5e3 0 0)
-Rvin     vin_src  vin  100
+Vin_src  vin_src_m  0  DC 0.9  SIN(0.9 0.6 1.5e3 0 0)
+Vdith    vin_src    vin_src_m  SIN(0 50m 7.75e3 0 0)
+Rvin     vin_src    vin  100
 
 * ============================================================
 * Non-overlapping clocks (Ts=1µs, dead time=20ns)

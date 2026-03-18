@@ -79,7 +79,7 @@ VVSS vss  0  DC 0
 *   → 100kHz is noise-shaped out of band, no in-band power increase
 * ============================================================
 Vin_src  vin_src_m  0  DC 0.9  SIN(0.9 0.65 1.5e3 0 0)
-Vdith    vin_src    vin_src_m  SIN(0 50m 7.75e3 0 0)
+Vdith    vin_src    vin_src_m  SIN(0 50m 5e3 0 0)
 Rvin     vin_src    vin  100
 
 * ============================================================

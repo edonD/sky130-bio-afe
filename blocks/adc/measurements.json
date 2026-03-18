@@ -1,64 +1,64 @@
 {
   "score": 0.0,
-  "enob_tt_27": 4.91566048557768,
-  "enob_pvt_min": 3.612012974400337,
-  "sndr_tt_27": 31.352276123177635,
+  "enob_tt_27": 5.791490172432425,
+  "enob_pvt_min": 4.741106948533732,
+  "sndr_tt_27": 36.6247708380432,
   "n_bits_tt": 10000,
   "pvt_results": [
     {
       "corner": "tt",
       "temp": 27,
       "ngspice_ok": true,
-      "sim_time_s": 53.550344467163086,
-      "enob": 4.91566048557768,
-      "sndr_db": 31.352276123177635,
+      "sim_time_s": 51.49652981758118,
+      "enob": 5.791490172432425,
+      "sndr_db": 36.6247708380432,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4988
+      "bit_density": 0.4979
     },
     {
       "corner": "ff",
       "temp": -40,
       "ngspice_ok": true,
-      "sim_time_s": 58.70680809020996,
-      "enob": 4.799357642858698,
-      "sndr_db": 30.652133010009365,
+      "sim_time_s": 56.90320324897766,
+      "enob": 5.501272461570713,
+      "sndr_db": 34.87766021865569,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4998
+      "bit_density": 0.499
     },
     {
       "corner": "ff",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 52.14711380004883,
-      "enob": 4.576507757116399,
-      "sndr_db": 29.310576697840723,
+      "sim_time_s": 51.24656796455383,
+      "enob": 5.2417551024575575,
+      "sndr_db": 33.315365716794496,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4938
+      "bit_density": 0.4927
     },
     {
       "corner": "ss",
       "temp": -40,
       "ngspice_ok": true,
-      "sim_time_s": 51.294686794281006,
-      "enob": 3.612012974400337,
-      "sndr_db": 23.50431810589003,
+      "sim_time_s": 50.845343589782715,
+      "enob": 4.741106948533732,
+      "sndr_db": 30.301463830173066,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.5041
+      "bit_density": 0.502
     },
     {
       "corner": "ss",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 51.49496936798096,
-      "enob": 4.468416915151482,
-      "sndr_db": 28.65986982921192,
+      "sim_time_s": 48.84218955039978,
+      "enob": 5.594239767236027,
+      "sndr_db": 35.437323398760874,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4962
+      "bit_density": 0.4949
     }
   ]
 }

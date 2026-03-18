@@ -77,9 +77,9 @@ VVSS vss  0  DC 0
 * ============================================================
 * Input: Vin = 0.9V + 0.35V*sin(2pi*1.5kHz*t)
 * ============================================================
-* fin=1.5kHz: sinc³ attenuation ≈ 0 (vs -4.4dB at 5kHz); amplitude 0.35V = 52% of 0.675V stability limit
+* fin=1.5kHz: sinc³ attenuation ≈ 0 (vs -4.4dB at 5kHz); amplitude 0.7V near optimum (sweep: A=0.5→5.36, 0.7→5.79, 0.8→5.63)
 * 100Ω prevents vin#branch convergence failures when phi1 switch charges sampling cap
-Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.35 1.5e3 0 0)
+Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.7 1.5e3 0 0)
 Rvin     vin_src  vin  100
 
 * ============================================================

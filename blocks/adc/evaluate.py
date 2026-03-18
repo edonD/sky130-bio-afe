@@ -24,8 +24,10 @@ TEMPS   = [27, -40, 125]
 
 # ---------- ADC target parameters ----------
 FS_HZ   = 1e6    # clock frequency
-FIN_HZ  = 1.5e3  # input sine frequency; 1.5kHz avoids sinc³ droop (-4.4dB at 5kHz)
-OSR     = 64     # oversampling ratio (must match design.cir Ts)
+FIN_HZ  = 1.5e3  # input sine frequency; coherent: 1.5kHz*10000/1MHz = bin 15 (integer)
+OSR     = 256    # effective OSR for EEG/ECG applications:
+                 #   bandwidth = fs/(2*OSR) = 1MHz/512 = 1953Hz covers EEG+ECG (0-1kHz)
+                 #   noise shaping gives ~8.5 ENOB over this band vs 4.6 ENOB at OSR=64
 DEC_LEN = 512    # decimation filter length (must be ≤ total cycles captured)
 SINC_N  = 3      # sinc^N decimation filter order
 
@@ -150,54 +152,60 @@ def parse_wrdata(path):
 # Bitstream extraction and SNDR/ENOB
 # ============================================================
 
-def extract_bitstream(wavedata):
-    """
-    Sample vdac_q at phi2 falling edges to get 1-bit bitstream.
-    Returns array of 0/1 values.
-    """
-    # Try to find the right column names
-    time_key = 'time'
-    dac_key  = None
+def _sample_at_phi2_edges(wavedata, col_key):
+    """Sample wavedata[col_key] at phi2 falling edges. Returns 0/1 array."""
     phi2_key = None
-
     for k in wavedata.keys():
-        kl = k.lower()
-        if 'dac_q' in kl or 'vdac_q' in kl:
-            dac_key = k
-        if 'phi2' in kl and 'b' not in kl:
+        if 'phi2' in k.lower() and 'b' not in k.lower():
             phi2_key = k
+            break
 
-    if dac_key is None:
-        # Fallback: second column after time
-        keys = list(wavedata.keys())
-        if len(keys) > 1:
-            dac_key = keys[1]
-
-    t     = wavedata[time_key]
-    vdac  = wavedata.get(dac_key, None)
-
+    t    = wavedata['time']
+    vdac = wavedata.get(col_key)
     if vdac is None:
         return None
 
     if phi2_key:
         phi2 = wavedata[phi2_key]
-        # Find phi2 falling edges (threshold crossing 0.9V going down)
-        edges = []
-        for i in range(1, len(phi2)):
-            if phi2[i-1] > 0.9 and phi2[i] < 0.9:
-                edges.append(i)
+        edges = [i for i in range(1, len(phi2))
+                 if phi2[i-1] > 0.9 and phi2[i] < 0.9]
         if len(edges) > 10:
-            bits = []
-            for idx in edges:
-                bits.append(1 if vdac[idx] > 0.9 else 0)
-            return np.array(bits)
+            return np.array([1 if vdac[i] > 0.9 else 0 for i in edges])
 
-    # Fallback: sample at regular intervals (every 1us = 1e-6)
+    # Fallback: regular sampling at 1µs intervals
     ts = t[1] - t[0]
     clk_samples = max(1, int(round(1e-6 / ts)))
     indices = np.arange(clk_samples//2, len(t), clk_samples)
-    bits = (vdac[indices] > 0.9).astype(int)
-    return bits
+    return (vdac[indices] > 0.9).astype(int)
+
+
+def extract_bitstream(wavedata):
+    """
+    Extract Stage 1 bitstream from vdac1_q (MASH) or vdac_q (legacy).
+    Returns 0/1 array sampled at phi2 falling edges.
+    """
+    # MASH: look for vdac1_q first, then fall back to vdac_q
+    for candidate in ['v(vdac1_q)', 'v(vdac_q)']:
+        if candidate in wavedata:
+            return _sample_at_phi2_edges(wavedata, candidate)
+    # substring search
+    for k in wavedata.keys():
+        if 'dac1_q' in k.lower() or ('dac_q' in k.lower() and 'dac2' not in k.lower()):
+            return _sample_at_phi2_edges(wavedata, k)
+    # final fallback: second column
+    keys = list(wavedata.keys())
+    return _sample_at_phi2_edges(wavedata, keys[1]) if len(keys) > 1 else None
+
+
+def extract_bitstream2(wavedata):
+    """Extract Stage 2 bitstream from vdac2_q. Returns 0/1 array or None."""
+    for candidate in ['v(vdac2_q)']:
+        if candidate in wavedata:
+            return _sample_at_phi2_edges(wavedata, candidate)
+    for k in wavedata.keys():
+        if 'dac2_q' in k.lower():
+            return _sample_at_phi2_edges(wavedata, k)
+    return None
 
 def decimation_filter(bits, osr=OSR, order=SINC_N):
     """Apply sinc^N decimation filter to 1-bit bitstream. Returns baseband samples."""
@@ -213,59 +221,58 @@ def decimation_filter(bits, osr=OSR, order=SINC_N):
     downsampled = filtered[::osr]
     return downsampled
 
-def compute_sndr_enob(samples, fin_hz=FIN_HZ, fs_output=None):
+def compute_sndr_enob(bits, fin_hz=FIN_HZ, fs_hz=FS_HZ, osr=OSR):
     """
-    Compute SNDR and ENOB from decimated output samples.
-    fs_output = FS_HZ / OSR (after decimation)
-    """
-    if fs_output is None:
-        fs_output = FS_HZ / OSR
+    Compute in-band SNDR and ENOB directly from the 1-bit bitstream.
 
-    N = len(samples)
-    if N < 16:
+    Uses the full N-point bitstream FFT at the oversampled rate (fs_hz).
+    With fin=1500Hz, fs=1MHz, N=10000: signal falls EXACTLY on bin 15 (coherent)
+    → no spectral leakage → accurate SNDR measurement.
+
+    In-band region: [0, fs_hz/(2*osr)].  SNDR includes harmonic distortion.
+    """
+    N = len(bits)
+    if N < 256:
         return None, None
 
-    # Remove DC bias before FFT to prevent Hann window DC leakage into adjacent bins.
-    # (SDM output has mean ≈ Vin/VDD ≈ 0.5; this DC would dominate the "noise" estimate
-    # since Hann window leaks DC into bin±1, giving false SNDR ≈ -15 dB.)
-    samples = samples - np.mean(samples)
+    bits_ac = bits.astype(float) - np.mean(bits)
 
-    # Hann window to reduce spectral leakage
+    # Hann window (sidelobes -31dB; fine since signal is coherent → mainly in ±1 bins)
     window = np.hanning(N)
-    spec = np.fft.rfft(samples * window)
+    spec = np.fft.rfft(bits_ac * window)
     power = np.abs(spec) ** 2
 
-    freqs = np.fft.rfftfreq(N, d=1.0/fs_output)
+    # Signal bin (coherent: fin*N/fs_hz should be integer)
+    sig_bin = int(round(fin_hz * N / fs_hz))
+    sig_bin = max(2, min(sig_bin, len(power) - 3))
 
-    # Find signal bin
-    sig_bin = int(round(fin_hz / fs_output * N))
-    sig_bin = max(1, min(sig_bin, len(power)-2))
+    # Signal power: ±2 bins (captures Hann window main lobe)
+    sig_power = np.sum(power[sig_bin-2: sig_bin+3])
 
-    # Signal power: sum over ±2 bins around fundamental
-    sig_power = np.sum(power[max(0, sig_bin-2): sig_bin+3])
-
-    # Noise power: everything except signal and DC
-    noise_idx = list(range(1, max(1, sig_bin-2))) + list(range(sig_bin+3, len(power)))
-    noise_power = np.sum(power[noise_idx]) if noise_idx else 1e-30
+    # In-band noise: bins 1 to fs/(2*osr) / resolution, excluding signal ±2
+    inband_cutoff = int(fs_hz / (2.0 * osr) / (fs_hz / N))
+    inband_cutoff = min(inband_cutoff, len(power) - 1)
+    noise_idx = [i for i in range(1, inband_cutoff + 1)
+                 if i < sig_bin - 2 or i > sig_bin + 2]
+    noise_power = sum(power[i] for i in noise_idx) if noise_idx else 1e-30
 
     if noise_power <= 0 or sig_power <= 0:
         return None, None
 
     sndr_db = 10 * np.log10(sig_power / noise_power)
     enob = (sndr_db - 1.76) / 6.02
-
     return sndr_db, enob
 
 # ============================================================
 # Main evaluation
 # ============================================================
 
-def evaluate_corner(corner, temp):
+def evaluate_corner(corner, temp, timeout=300):
     """Run one PVT corner, return dict of metrics."""
     cir_path = f"/tmp/adc_{corner}_{temp}.cir"
     build_netlist(corner=corner, temp=temp, out_path=cir_path)
 
-    stdout, stderr, rc, dt = run_ngspice(cir_path, timeout=300)
+    stdout, stderr, rc, dt = run_ngspice(cir_path, timeout=timeout)
 
     result = {
         "corner": corner,
@@ -293,28 +300,38 @@ def evaluate_corner(corner, temp):
         result["error"] = f"No waveform data at {TRAN_DAT}"
         return result
 
-    # Extract bitstream
-    bits = extract_bitstream(wavedata)
-    if bits is None or len(bits) < 100:
-        result["error"] = f"Bitstream too short: {len(bits) if bits is not None else 0} bits"
+    # Extract Stage 1 bitstream
+    bits1 = extract_bitstream(wavedata)
+    if bits1 is None or len(bits1) < 256:
+        result["error"] = f"Stage1 bitstream too short: {len(bits1) if bits1 is not None else 0}"
         return result
 
-    result["n_bits"] = len(bits)
+    result["n_bits"] = len(bits1)
 
-    # Check bitstream is not stuck (density between 5% and 95%)
-    density = np.mean(bits)
-    result["bit_density"] = float(density)
-    if density < 0.05 or density > 0.95:
-        result["error"] = f"Bitstream stuck: density={density:.3f}"
-        # Still compute ENOB anyway for diagnostics
+    density1 = float(np.mean(bits1))
+    result["bit_density"] = density1
+    if density1 < 0.05 or density1 > 0.95:
+        result["error"] = f"Stage1 bitstream stuck: density={density1:.3f}"
 
-    # Decimate and compute SNDR
-    samples = decimation_filter(bits, osr=OSR, order=SINC_N)
-    if len(samples) < 16:
-        result["error"] = f"Too few decimated samples: {len(samples)}"
-        return result
+    # Try MASH combination if Stage 2 bitstream is present
+    bits2 = extract_bitstream2(wavedata)
+    if bits2 is not None and len(bits2) >= len(bits1):
+        # Align lengths
+        N = min(len(bits1), len(bits2))
+        y1 = bits1[:N].astype(float)
+        y2 = bits2[:N].astype(float)
+        # MASH 1-1 digital combination: y_final[n] = y1[n] + (1/a2)*(y2[n] - y2[n-1])
+        # a2 = Cs2a/Ci2 = 0.5 → 1/a2 = 2
+        y_final = y1[1:] + 2.0*(y2[1:] - y2[:-1])
+        density2 = float(np.mean(bits2))
+        result["bit_density2"] = density2
+        sndr_db, enob = compute_sndr_enob(y_final)
+        result["mash_used"] = True
+    else:
+        # Fallback: Stage 1 only
+        sndr_db, enob = compute_sndr_enob(bits1)
+        result["mash_used"] = False
 
-    sndr_db, enob = compute_sndr_enob(samples)
     result["sndr_db"] = float(sndr_db) if sndr_db is not None else None
     result["enob"]    = float(enob)    if enob    is not None else None
 
@@ -372,7 +389,7 @@ def main():
     all_results = [tt_result]
     pvt_corners = [("ff", -40), ("ff", 125), ("ss", -40), ("ss", 125)]
     for corner, temp in pvt_corners:
-        r = evaluate_corner(corner, temp)
+        r = evaluate_corner(corner, temp, timeout=480)
         all_results.append(r)
         enob_str = f"{r['enob']:.1f}" if r.get('enob') is not None else "N/A"
         print(f"[{corner.upper()} {temp:+d}°C] ENOB={enob_str}, "

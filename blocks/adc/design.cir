@@ -1,41 +1,31 @@
-* 1st-order Switched-Capacitor Sigma-Delta ADC — Transistor Level
+* MASH 1-1 Switched-Capacitor Sigma-Delta ADC — Transistor Level
 * SKY130 130nm CMOS, 1.8V supply
-* fs=1MHz, OSR=64, fin=10kHz (EEG/ECG band)
+* fs=1MHz, OSR=64, fin=1.5kHz (EEG/ECG band)
 *
-* ARCHITECTURE:
-*   Inverting SC integrator (samples Vin, subtracts Vdac into Ci)
-*   + 2-inverter CMOS comparator (trip ≈ VDD/2 = 0.9V)
-*   + TG sample-and-hold (samples comp output during phi1 → holds during phi2)
-*   + 1-bit DAC = held comparator output (vdac_q)
+* ARCHITECTURE: MASH 1-1 (Multi-stAge noise SHaping, 1st+1st order cascade)
+*   Stage 1: 1st-order SC SDM, input=Vin, DAC=vdac1_q (its OWN comparator)
+*            → y1 bitstream at /tmp/adc_tran.dat column vdac1_q
+*   Stage 2: 1st-order SC SDM, input=Stage1 RESIDUE (vint1_out - vdac1)
+*            DAC=vdac2_q (its OWN comparator, independent loop)
+*            → y2 bitstream at /tmp/adc_tran.dat column vdac2_q
+*   Digital: y_final[n] = y1[n] + (y2[n] - y2[n-1]) → 2nd-order NTF
+*            NTF(z) = (1-z⁻¹)²
 *
-* SIGN CONVENTION (inverting SC integrator, standard Fleischer-Laker):
-*   Vout[n] = Vout[n-1] - (Cs/Ci)*(Vin[n-1] - Vdac[n-1])
-*   = Vout[n-1] - 0.25*(Vin - Vdac)
+* WHY MASH OVER CIFB:
+*   CIFB: comparator on INT2 → INT1 wanders far from VCM before correction → clips
+*   MASH: each stage has its own direct feedback loop → INT1 stays bounded like
+*         the proven 1st-order design. Stage 2 clipping gets shaped by (1-z⁻¹)
+*         in the digital combination → negligible in-band contribution.
 *
-*   When Vout > VCM: comp fires HIGH, Vdac=VDD, Δ=-(Vin-VDD)=+0.9/4=+0.225 (WRONG)
+* Stage 1: a1=Cs1/Ci1=0.125 (reduced → integrator max=1.125V < OTA Vout_max=1.20V, no clipping)
+* Stage 2: two input caps:
+*   Cs2a samples residue = vint1_out - vdac1 (Stage 1 analog residue)
+*   Cs2b = vcmbias top, bot switches between vdac2 (phi1) and vint2_in (phi2)
+*          → implements Stage 2 DAC subtraction
+*   a2 = Cs2a/Ci2 = Cs2b/Ci2 = 0.5
 *
-* ACTUALLY use a non-inverting SC integrator with bottom plate sampling:
-*   phi1: cs_top=vin, cs_bot=vcmbias (sample)
-*   phi2: cs_top=vcmbias, cs_bot=vdac (subtract DAC from integrator input)
-*         OTA input = cs_bot switched to vdac
-*
-* SIMPLIFIED CORRECT TOPOLOGY:
-*   Standard bottom-plate SC integrator:
-*   phi1: bottom plate = Vdac (DAC reference)
-*   phi2: bottom plate = virtual ground (VCM)
-*   phi1: top plate = Vin (input)
-*   phi2: top plate = VCM (reset top plate)
-*   → Vout[n] = Vout[n-1] + (Cs/Ci)*(Vin - Vdac) ✓
-*   When Vout > VCM: Vdac=VDD → (Vin-VDD)<0 → Vout decreases ✓ NEGATIVE FEEDBACK
-*
-* KEY INSIGHT for the correct SC integrator:
-*   Bottom plate (cs_bot) connects to:
-*     phi1: Vdac (set DAC reference)
-*     phi2: OTA virtual ground (VCM)
-*   Top plate (cs_top) connects to:
-*     phi1: Vin (sample input)
-*     phi2: VCM (reset top to common mode)
-*   → Charge transferred = Cs*(Vin - Vdac) into OTA virtual ground ✓
+* COHERENCE: fin=1.5kHz, N=10000 bits at fs=1MHz → signal at EXACT bin 15
+*            → no spectral leakage in bitstream FFT → accurate SNDR measurement
 * ============================================================
 
 .lib sky130_models/sky130.lib.spice tt
@@ -45,27 +35,30 @@
 * ============================================================
 .param VDD    = 1.8
 .param VCM    = 0.9
-.param Cs     = 3e-12    ; sampling cap 3pF  (α=Cs/Ci=0.75 → NTF=(1-z⁻¹)/(1-0.25z⁻¹))
-.param Ci     = 4e-12    ; integration cap 4pF  (step=0.675V, stable range ±0.675V)
 
-* OTA sizing (keeps same transistors as before)
+* Stage 1: a1 = Cs1/Ci1 = 0.175 → integrator max≈1.18V < OTA Vout_max=1.20V (no clipping)
+* Max swing: a1*(Vin_max - Vdac_min) = 0.175*1.6 = 0.28V → Vout_max = 1.18V (safe)
+* Larger a1 vs 0.125 → less idle tone locking, better shaped noise → better OSR=256 SNDR
+.param Cs1    = 0.7e-12  ; 0.7pF sampling cap  (a1=0.175, best SNDR sweet spot)
+.param Ci1    = 4e-12    ; 4pF integration cap
+
+* Stage 2: a2 = Cs2/Ci2 = 0.5 (per cap; Stage 2 may clip, that's OK for MASH)
+.param Cs2a   = 2e-12    ; 2pF residue signal sampling cap
+.param Cs2b   = 2e-12    ; 2pF Stage-2 feedback cap
+.param Ci2    = 4e-12    ; 4pF integration cap
+
+* OTA sizing — minimal noise floor (proven 1st-order geometry)
 .param p_wn_in   = 4e-6
 .param p_ln_in   = 0.5e-6
 .param p_wp_load = 4e-6
 .param p_lp_load = 1e-6
 .param p_wn_tail = 4e-6
 .param p_ln_tail = 2e-6
-* M5 2nd stage PMOS: need ID_M5 = ID_M6 for balanced output stage
-* ID_M3=25µA (W/L=4), ID_M5 mirrors M3 with ratio (W/L_M5)/(W/L_M3) * m=2
-* Need 100µA: (W5*2/L5) / (4/1) = 100/25=4 → W5*2/L5=16 → W5=4µm,L5=0.5µm,m=2 → W/L_eff=16
-* ID_M6=100µA from vbn mirror (W=4µm,L=1µm vs Wbias=4µm,Lbias=2µm → ratio=2 → 2*50µA=100µA)
-.param p_wp_2nd  = 4e-6
+.param p_wp_2nd  = 16e-6
 .param p_lp_2nd  = 0.5e-6
-.param p_wn_2nd  = 4e-6
-.param p_ln_2nd  = 1e-6
-* Cc: stability with 4pF Ci load
-.param p_cc      = 2e-12
-* 50µA bias: gm1≈465µA/V, GBW=37MHz → fast settling <100ns
+.param p_wn_2nd  = 8e-6
+.param p_ln_2nd  = 0.5e-6
+.param p_cc      = 4e-12
 .param p_ibias   = 50e-6
 
 * ============================================================
@@ -75,18 +68,15 @@ VDD  vdd  0  DC 1.8
 VVSS vss  0  DC 0
 
 * ============================================================
-* Input: Vin = 0.9V + 0.35V*sin(2pi*1.5kHz*t)
+* Input: Vin = 0.9V + 0.7V*sin(2pi*1.5kHz*t)
 * ============================================================
-* fin=1.5kHz: sinc³ attenuation ≈ 0 (vs -4.4dB at 5kHz); amplitude 0.7V near optimum (sweep: A=0.5→5.36, 0.7→5.79, 0.8→5.63)
-* 100Ω prevents vin#branch convergence failures when phi1 switch charges sampling cap
 Vin_src  vin_src  0  DC 0.9  SIN(0.9 0.7 1.5e3 0 0)
 Rvin     vin_src  vin  100
 
 * ============================================================
-* Non-overlapping clocks (Ts=1us)
-* phi1 HIGH: 0→490ns  phi2 HIGH: 510ns→1000ns  dead=20ns
+* Non-overlapping clocks (Ts=1µs)
+* phi1 HIGH: 0–490ns   phi2 HIGH: 510–1000ns   dead=20ns
 * ============================================================
-* 100Ω series resistors prevent infinite-current at switch transitions (prevents #branch convergence errors)
 Vphi1  phi1_src  0  PULSE(0   1.8  0     2n 2n  486n  1u)
 Vphi1b phi1b_src 0  PULSE(1.8 0    0     2n 2n  486n  1u)
 Vphi2  phi2_src  0  PULSE(0   1.8  510n  2n 2n  486n  1u)
@@ -97,17 +87,21 @@ Rphi2  phi2_src  phi2  100
 Rphi2b phi2b_src phi2b 100
 
 * ============================================================
-* Bias for OTA
+* Bias (shared vbn for both OTA instances)
+* Stage 1 uses vcmbias.  Stage 2 uses vcmbias2 (ISOLATED to prevent crosstalk:
+*   Cs2b top-plate switching would perturb vcmbias and corrupt OTA1's non-inv input)
 * ============================================================
-* 100Ω series resistor prevents infinite-current spike at switch transitions (vcmbias#branch convergence fix)
-Vcmbias vcmbias_src 0 DC 0.9
-Rcmbias vcmbias_src vcmbias 100
+Vcmbias  vcmbias_src  0 DC 0.9
+Rcmbias  vcmbias_src  vcmbias  100
+Vcmbias2 vcmbias2_src 0 DC 0.9
+Rcmbias2 vcmbias2_src vcmbias2 100
 Ibias  vdd  vbn  DC {p_ibias}
 XMbias vbn  vbn  vss vss  sky130_fd_pr__nfet_01v8  w={p_wn_tail} l={p_ln_tail} m=1
 
 * ============================================================
 * OTA — Two-stage Miller-compensated
-* Ports: vip vin vout vdd vss vbn
+* Ports: vip  vin  vout  vdd  vss  vbn
+* vip = INVERTING input (M1 gate: vip↑→vout↓) → use at virtual-ground node
 * ============================================================
 .subckt ota  vip  vin  vout  vdd  vss  vbn
 XMtail  ntail  vbn    vss  vss  sky130_fd_pr__nfet_01v8  w={p_wn_tail} l={p_ln_tail} m=1
@@ -117,207 +111,144 @@ XM3     nd1    nd1    vdd   vdd  sky130_fd_pr__pfet_01v8  w={p_wp_load} l={p_lp_
 XM4     nd2    nd1    vdd   vdd  sky130_fd_pr__pfet_01v8  w={p_wp_load} l={p_lp_load} m=1
 XM5     vout   nd2    vdd   vdd  sky130_fd_pr__pfet_01v8  w={p_wp_2nd}  l={p_lp_2nd}  m=2
 XM6     vout   vbn    vss   vss  sky130_fd_pr__nfet_01v8  w={p_wn_2nd}  l={p_ln_2nd}  m=1
-* Null resistor Rz in series with Cc: with Rz=2200 > 1/gm_M5≈1920Ω, zero moves from RHP to LHP
-* LHP zero at ~284MHz boosts PM to ~88° (vs ~30° without it)
 Cc      nd2    cc_int {p_cc}
 Rz      cc_int vout   2200
 .ends ota
 
 * ============================================================
-* Transmission Gate — closed when ph=1
+* Transmission Gate — closed when ph=HIGH
 * ============================================================
 .subckt tg  in  out  ph  phb  vdd  vss
-* d g s b ordering: gate=clock, source/drain=signal path
 XMN  in  ph   out  vss  sky130_fd_pr__nfet_01v8  w=1e-6  l=150n  m=1
 XMP  in  phb  out  vdd  sky130_fd_pr__pfet_01v8  w=2e-6  l=150n  m=1
 .ends tg
 
 * ============================================================
-* CORRECTED SC Integrator Topology
-*
-* CHARGE TRANSFER ANALYSIS:
-* At end of phi1: Q_cs = Cs*(Vin - Vdac) [top=Vin, bot=Vdac]
-* At end of phi2: Q_cs = Cs*(VCM - VCM) = 0 [top=VCM, bot=virtual ground=VCM]
-* ΔQ into virtual ground (vint_in) = Q_cs_phi1 - Q_cs_phi2 = Cs*(Vin-Vdac)
-* OTA responds: Δvint_out = (Cs/Ci)*(Vin-Vdac) ← NON-INVERTING INTEGRATOR
-*
-* NOTE: The OTA configured with V+ = fixed vcmbias = 0.9V,
-*        V- = vint_in = virtual ground
-* When ΔQ is injected INTO vint_in (vint_in rises → V- > V+):
-*   OTA DECREASES output → vint_out DECREASES
-*   Ci (from vint_in to vint_out) provides negative feedback ← WAIT IS THIS RIGHT?
-*
-* With Ci from vint_in (node A) to vint_out (node B):
-*   Q_Ci = Ci*(V_A - V_B) = Ci*(vint_in - vint_out)
-*   V_A = vint_in → fixed at VCM by OTA virtual ground
-*   V_B = vint_out → adjusts to absorb charge
-*
-* If ΔQ+ is injected into vint_in (tends to rise): OTA drives vint_out DOWN
-*   → V_B decreases → (V_A - V_B) increases → Q_Ci increases
-*   → MORE charge on vint_in side of Ci → vint_in FURTHER INCREASES
-*   → THIS IS POSITIVE FEEDBACK!
-*
-* The OTA inverting input IS inverting. The correct OTA for NEGATIVE FEEDBACK with
-* Ci from virtual ground to output needs: increasing vint_in → increasing vout.
-* This means: vip = vint_in (non-inverting input = virtual ground) [SWAP!]
-*             vin = vcmbias (inverting input = fixed bias)
-*
-* CORRECTED: swap vip and vin in OTA:
-*   Xota1 vint_in vcmbias vint_out vdd vss vbn ota
-*   [vip = vint_in, vin = vcmbias = 0.9V]
-*   When vint_in > vcmbias=0.9V → output INCREASES → Ci pushes vint_in UP → stable? NO
-*
-* Actually: for standard op-amp virtual ground at V- with negative feedback:
-*   V+ = 0 (GND) or Vbias, V- = A (virtual ground), Vout = output
-*   Feedback cap Ci from A to Vout
-*   When charge injected into A (A rises above V+): Vout must DECREASE
-*   As Vout decreases, (A - Vout) increases, Ci charges more → MORE current out of A → NEGATIVE FEEDBACK
-*
-* Wait: If Ci is from A to Vout, and Vout DECREASES:
-*   Q_Ci = Ci*(A - Vout) INCREASES (A fixed, Vout decreases)
-*   To increase Q_Ci, positive charge flows INTO A (from the charge supply to A)
-*   But we want current to flow OUT OF A to reduce the overshoot...
-*   Actually: the current balance is that external charge injected into A equals
-*   the change in Ci charge plus any other currents.
-*   KCL at A: Iinj + I_Ci_into_A = 0 (for ideal virtual ground A=const)
-*   Iinj = positive (charge injected)
-*   I_Ci_into_A = -Iinj = negative (current flows FROM A through Ci to Vout)
-*   This means current flows FROM A (virtual ground) THROUGH Ci TO VOUT
-*   → Ci charges from A to Vout: positive charge leaves A, negative charge enters A
-*   → Q_Ci = Ci*(A - Vout) is NOT changing... hmm
-*
-* I think the confusion is between op-amp sign conventions. Let me just use:
-*   Standard inverting op-amp: V+ = GND (0), V- = A (virtual ground), Vout
-*   Ci from A to Vout: as Vout goes NEGATIVE (when A is positive), Q_Ci increases
-*   KCL: Iinj (into A) + d(Q_Ci_at_A)/dt = 0
-*   d(Q_Ci)/dt = Ci * d(A-Vout)/dt ≈ -Ci * dVout/dt (since A ≈ 0 = constant)
-*   → Ci * (-dVout/dt) = -Iinj → dVout/dt = Iinj/Ci → Vout INTEGRATES Iinj ✓
-*   → Vout increases when Iinj > 0 → NON-INVERTING w.r.t. input current!
-*   → But OTA output: V+>V- → Vout increases... so OTA with V+ = GND, V- = A:
-*      When Iinj>0 → A rises → V+ > V- ... no V+ = GND, V- = A > 0 → Vout DECREASES
-*      → Vout DECREASES when A increases → INVERTING!
-*   Contradiction with the charge analysis above... I must have a sign error.
-*
-* ========= FINAL RESOLUTION =========
-* Use SPICE directly with a behavioral B-source to verify, then replace.
-* For now, use the KNOWN WORKING topology from textbooks:
-*   - Standard non-inverting SC integrator (Cs bottom plate = Vdac at phi1)
-*   - The OTA with V+ at virtual ground node, V- at fixed bias
-*   - This gives Vout[n] = Vout[n-1] + (Cs/Ci)*(Vin - Vdac) ✓
-*
+* STAGE 1: 1st-order SC Integrator + Comparator + S&H
+* Δx1 = +(Cs1/Ci1)*(Vin - vdac1) = +0.75*(Vin - vdac1)
+* Comparator fires on vint1_out, drives vdac1_q (Stage 1's OWN bitstream)
 * ============================================================
 
-* phi1: top=Vin, bottom=Vdac
-* phi2: top=VCM, bottom=virtual ground (vint_in)
-* OTA: vip=vint_in (non-inverting INPUT = virtual ground), vin=vcmbias (fixed bias)
-* Note: reversed from before! This gives non-inverting integrator response.
+* SC Integrator 1
+Xs1a  vin       cs1_top  phi1  phi1b  vdd  vss  tg
+Xs1b  vdac1     cs1_bot  phi1  phi1b  vdd  vss  tg
+Xs2a  vcmbias   cs1_top  phi2  phi2b  vdd  vss  tg
+Xs2b  vint1_in  cs1_bot  phi2  phi2b  vdd  vss  tg
+Cs1_cap  cs1_top  cs1_bot  {Cs1}
+Xota1    vint1_in  vcmbias  vint1_out  vdd  vss  vbn  ota
+Ci1_int  vint1_out  vint1_in  {Ci1}
 
-* phi1 switches (sample Vin onto Cs, bottom plate sampled with Vdac)
-Xs1a  vin      cs_top  phi1  phi1b  vdd  vss  tg
-Xs1b  vdac     cs_bot  phi1  phi1b  vdd  vss  tg
+* Comparator 1: 4-inverter chain (NON-INVERTING total: even inversions) on vint1_out
+* vint1_out > VCM → comp1a=LOW → comp1b=HIGH → comp1c=LOW → comp1d=HIGH → vdac1=1.8V
+* Four stages give Av≈(-20)^4: rail-to-rail output even for ~0.1mV overdrive at VCM
+* → Δx1=+(Cs1/Ci1)*(Vin-1.8)<0 → NEGATIVE FEEDBACK ✓
+XMnA  comp1a_out  vint1_out    vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpA  comp1a_out  vint1_out    vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnB  comp1b_out  comp1a_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpB  comp1b_out  comp1a_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnC1 comp1c_out  comp1b_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpC1 comp1c_out  comp1b_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnD1 comp1d_out  comp1c_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpD1 comp1d_out  comp1c_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
 
-* phi2 switches (charge transfer: top=VCM, bottom=virtual ground)
-Xs2a  vcmbias  cs_top  phi2  phi2b  vdd  vss  tg
-Xs2b  vint_in  cs_bot  phi2  phi2b  vdd  vss  tg
+* S&H 1: transparent during phi1 → samples comp1d_out → vdac1_q (holds during phi2)
+Xtg_sh1  comp1d_out  vdac1_q  phi1  phi1b  vdd  vss  tg
+Ch_dac1  vdac1_q  vss  10e-12
+Rdac1    vdac1_q  vdac1  1
 
-* Sampling cap
-Csamp  cs_top  cs_bot  {Cs}
-
-* OTA: non-inverting input = vint_in (virtual ground here), inverting = vcmbias
-* NOTE: vip=vint_in, vin=vcmbias → when vint_in > vcmbias → output increases
-* This makes Ci (vint_in to vint_out) create positive feedback... unless...
+* ============================================================
+* STAGE 2: 1st-order SC SDM on Stage 1 residue
 *
-* Let me use the SIMPLEST POSSIBLE OTA configuration that works:
-* OTA as a follower: vip=some_ref, vin=output_feedback, vout = output
-* For the integrator: the output needs to INTEGRATE the input current
-* Use: vip=vcmbias, vin=vint_in, vout=vint_out
-* Ci: from vint_OUT to vint_IN (reversed compared to before)
-* This gives: when charge into vint_in → vint_in rises → vin > vip → vout FALLS
-*             → Ci (from vout to vin): Q_Ci = Ci*(vout-vin) → decreasing
-*             → current flows INTO vint_in from Ci = Ci*dvout/dt > 0...
+* Input: residue1 = vint1_out - vdac1  (Stage 1 analog residue, sampled on Cs2a)
+* DAC:   vdac2_q                        (Stage 2's OWN DAC, subtracted via Cs2b)
 *
-* I give up trying to derive this analytically. Just swap OTA inputs and cap orientation
-* to the known-working configuration.
+* Two-cap structure:
+*   Cs2a: phi1: top=vint1_out, bot=vdac1   → ΔQ_a = Cs2a*(vint1_out - vdac1)
+*         phi2: top=VCM, bot=vint2_in       → transfer residue to OTA2
+*   Cs2b: top permanently tied to vcmbias (VCM=0.9V)
+*         phi1: bot=vdac2   → Q_b = Cs2b*(VCM - vdac2)  [DAC feedback]
+*         phi2: bot=vint2_in → Q_b = 0                   [transfer]
+*         ΔQ_b = Cs2b*(VCM - vdac2) = -Cs2b*(vdac2 - VCM)  [subtracts DAC2]
 *
-* KNOWN WORKING (from standard textbooks):
-* OTA: V+ = VCM (fixed), V- = virtual_gnd, Vout
-* Ci: from Vout to virtual_gnd (Ci from OUTPUT to INVERTING input)
-* → `Ci_int vint_out vint_in {Ci}` [first node = vint_out, second = vint_in]
-* → OTA: Xota1 vcmbias vint_in vint_out vdd vss vbn ota (same as before)
-*
-* And SC switches:
-* phi1: cs_top=Vin, cs_bot=Vdac
-* phi2: cs_top=VCM, cs_bot=vint_in
-
-* OTA: port1("vip") is actually INVERTING (M1 gate → output falls when vip rises)
-*      → vint_in at port1 = inverting input → NEGATIVE feedback ✓
-*      → vcmbias at port2 = non-inverting input (reference) ✓
-Xota1  vint_in  vcmbias  vint_out  vdd  vss  vbn  ota
-
-* Integration cap: FROM OUTPUT to INPUT (key fix from before)
-Ci_int  vint_out  vint_in  {Ci}
-
-* ============================================================
-* Comparator: 2-inverter chain + TG S&H
-* Transparent during phi1 (when S2 is open, DAC change doesn't matter)
-* Holds during phi2 (provides stable Vdac for integration)
+* Δx2 = [Cs2a*(vint1_out-vdac1) + Cs2b*(VCM-vdac2)] / Ci2
+*      = 0.5*[(vint1_out-vdac1) - (vdac2-VCM)]
 * ============================================================
 
-* TWO-INVERTER COMPARATOR: total response is NON-INVERTING
-* The SC integrator is NON-INVERTING (Δvout = +(Cs/Ci)*(Vin-Vdac)).
-* A single inverter + NON-INVERTING integrator → POSITIVE feedback (wrong).
-* Two inverters give NON-INVERTING comparator path:
-*   vint_out > 0.9V → comp_out=LOW → comp2_out=HIGH → vdac=1.8V
-*   → Δvint = +(Cs/Ci)*(Vin-1.8) < 0 → vint DECREASES ← NEGATIVE FEEDBACK ✓
-* SKY130: µn/µp ≈ 3.2 → Wp ≈ 3.2*Wn for trip≈0.9V, Wn=4µm, Wp=12µm
-XMnA  comp_out   vint_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpA  comp_out   vint_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
-XMnB  comp2_out  comp_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
-XMpB  comp2_out  comp_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+* 100Ω buffer on vint1_out → vint1_s2 prevents Stage2 caps from hard-loading OTA1 output
+Rbuf_s2  vint1_out  vint1_s2  100
 
-* TG S&H: transparent during phi1 (phi1=1 → TG open)
-* Samples comp2_out (NON-INVERTING total) during phi1, holds during phi2
-Xtg_sh  comp2_out  vdac_q  phi1  phi1b  vdd  vss  tg
+* Cs2a: residue signal sampling (uses isolated vcmbias2 for top-plate reset)
+Xs3a  vint1_s2   cs2a_top  phi1  phi1b  vdd  vss  tg
+Xs3b  vdac1      cs2a_bot  phi1  phi1b  vdd  vss  tg
+Xs4a  vcmbias2   cs2a_top  phi2  phi2b  vdd  vss  tg
+Xs4b  vint2_in   cs2a_bot  phi2  phi2b  vdd  vss  tg
+Cs2a_cap  cs2a_top  cs2a_bot  {Cs2a}
 
-* Hold cap (10pF, clamps Vdac excursions from clock injection; settling still fast: 5pF*400Ω≈2ns << 488ns)
-Ch_dac  vdac_q  vss  10e-12
+* Cs2b: Stage 2 DAC feedback (top permanently at vcmbias2 — ISOLATED from Stage 1's vcmbias)
+* Switching cs2b_bot no longer couples into Stage 1's vcmbias reference
+Xs5b  vdac2     cs2b_bot  phi1  phi1b  vdd  vss  tg
+Xs6b  vint2_in  cs2b_bot  phi2  phi2b  vdd  vss  tg
+Cs2b_cap  vcmbias2  cs2b_bot  {Cs2b}
 
-* DAC = vdac_q directly (1Ω isolation resistor for convergence)
-Rdac  vdac_q  vdac  1
+* OTA2 and integration cap (uses vcmbias2 as its fixed reference)
+Xota2    vint2_in  vcmbias2  vint2_out  vdd  vss  vbn  ota
+Ci2_int  vint2_out  vint2_in  {Ci2}
 
-* ============================================================
-* Initial Conditions — CORRECTED for NON-INVERTING SC + double-inverter path
-*
-* vint_out=1.0V > 0.9V → inv1: comp_out=LOW(0V) → inv2: comp2_out=HIGH(1.8V)
-*   → vdac_q=1.8V → vdac=1.8V
-* First phi2: Δvint = +(Cs/Ci)*(Vin-Vdac) = +0.75*(0.9-1.8) = -0.675V
-*   → vint_out = 0.325V < 0.9V → comp_out=HIGH → comp2_out=LOW → vdac=0V
-* Second phi2: Δvint = +0.75*(0.9-0) = +0.675V → vint_out=1.0V → oscillation ✓
-*   density_1 = Vin/VDD = 0.5 at Vin=0.9V ✓ (α=0.75)
-* ============================================================
-.ic v(vint_out)  = 1.0
-.ic v(vint_in)   = 0.9
-.ic v(cs_top)    = 0.9
-.ic v(cs_bot)    = 1.8
-.ic v(vdac)      = 1.8
-.ic v(vdac_q)    = 1.8
-.ic v(comp_out)  = 0.0
-.ic v(comp2_out) = 1.8
+* Comparator 2: 4-inverter chain on vint2_out (Stage 2's own comparator)
+* vint2_out > VCM → comp2a=LOW → comp2b=HIGH → comp2c=LOW → comp2d=HIGH → vdac2=1.8V
+XMnC  comp2a_out  vint2_out    vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpC  comp2a_out  vint2_out    vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnD  comp2b_out  comp2a_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpD  comp2b_out  comp2a_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnE  comp2c_out  comp2b_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpE  comp2c_out  comp2b_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+XMnF  comp2d_out  comp2c_out   vss  vss  sky130_fd_pr__nfet_01v8  w=4e-6  l=150n  m=1
+XMpF  comp2d_out  comp2c_out   vdd  vdd  sky130_fd_pr__pfet_01v8  w=12e-6 l=150n  m=1
+
+* S&H 2: transparent during phi1 → samples comp2d_out → vdac2_q (holds during phi2)
+Xtg_sh2  comp2d_out  vdac2_q  phi1  phi1b  vdd  vss  tg
+Ch_dac2  vdac2_q  vss  10e-12
+Rdac2    vdac2_q  vdac2  1
 
 * ============================================================
-* Transient: 10ms = 10000 clock cycles at OSR=64 → 153 SINC decimated samples
+* Initial Conditions
+* Stage 1: same as proven 1st-order design
+* Stage 2: start at mid-supply equilibrium
 * ============================================================
-* RSHUNT=1e10: 10GΩ to GND on all nodes prevents floating-node singularity in SC circuits
-* RELTOL/VNTOL relaxed for fast switching transitions
-.options RSHUNT=1e10 RELTOL=0.01 ABSTOL=1e-12 VNTOL=1e-3 ITL4=200
+.ic v(vint1_out)  = 1.0
+.ic v(vint1_in)   = 0.9
+.ic v(cs1_top)    = 0.9
+.ic v(cs1_bot)    = 1.8
+.ic v(comp1a_out) = 0.0
+.ic v(comp1b_out) = 1.8
+.ic v(comp1c_out) = 0.0
+.ic v(comp1d_out) = 1.8
+.ic v(vdac1_q)    = 1.8
+.ic v(vdac1)      = 1.8
+
+.ic v(vint2_out)  = 0.9
+.ic v(vint2_in)   = 0.9
+.ic v(cs2a_top)   = 1.0
+.ic v(cs2a_bot)   = 1.8
+.ic v(cs2b_bot)   = 1.8
+.ic v(comp2a_out) = 0.0
+.ic v(comp2b_out) = 1.8
+.ic v(comp2c_out) = 0.0
+.ic v(comp2d_out) = 1.8
+.ic v(vdac2_q)    = 1.8
+.ic v(vdac2)      = 1.8
+
+* ============================================================
+* Transient: 10ms = 10000 clock cycles
+* ============================================================
+.options RSHUNT=1e10 RELTOL=0.001 ABSTOL=1e-13 VNTOL=1e-4 ITL4=300
 
 .control
-* 10ms @ 20ns max step → ~10000 clock cycles → ~153 decimated samples (OSR=64, SINC3 filter delay=190)
 tran 20n 10m uic
 
 set wr_vecnames
 set wr_singlescale
-wrdata /tmp/adc_tran.dat v(vint_out) v(vdac_q) v(vin) v(phi1) v(phi2) v(comp_out)
+wrdata /tmp/adc_tran.dat v(vint1_out) v(vdac1_q) v(vdac2_q) v(vin) v(phi1) v(phi2)
 
 quit
 .endc

@@ -1,64 +1,71 @@
 {
   "score": 0.0,
-  "enob_tt_27": 5.791490172432425,
-  "enob_pvt_min": 4.741106948533732,
-  "sndr_tt_27": 36.6247708380432,
+  "enob_tt_27": 6.356459709109842,
+  "enob_pvt_min": 5.650656040548009,
+  "sndr_tt_27": 40.025887448841246,
   "n_bits_tt": 10000,
   "pvt_results": [
     {
       "corner": "tt",
       "temp": 27,
       "ngspice_ok": true,
-      "sim_time_s": 51.49652981758118,
-      "enob": 5.791490172432425,
-      "sndr_db": 36.6247708380432,
+      "sim_time_s": 229.6153564453125,
+      "enob": 6.356459709109842,
+      "sndr_db": 40.025887448841246,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4979
+      "bit_density": 0.4998,
+      "bit_density2": 0.4838,
+      "mash_used": true
     },
     {
       "corner": "ff",
       "temp": -40,
-      "ngspice_ok": true,
-      "sim_time_s": 56.90320324897766,
-      "enob": 5.501272461570713,
-      "sndr_db": 34.87766021865569,
-      "n_bits": 10000,
-      "error": null,
-      "bit_density": 0.499
+      "ngspice_ok": false,
+      "sim_time_s": 480,
+      "enob": null,
+      "sndr_db": null,
+      "n_bits": 0,
+      "error": "TIMEOUT\nNote: Compatibility modes selected: hs a\n\nWarning: m=xx on .subckt line will override multiplier m hierarchy!\n\n\nCircuit: * mash 1-1 switched-capacitor sigma-delta adc \u2014 transistor level\n\nDoing analysis at TEMP = -40.000000 and TNOM = 27.000000\n\nUsing SPARSE 1.3 as Direct Linear Solver\nUsing transient initial conditions\n"
     },
     {
       "corner": "ff",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 51.24656796455383,
-      "enob": 5.2417551024575575,
-      "sndr_db": 33.315365716794496,
+      "sim_time_s": 254.40474128723145,
+      "enob": 5.650656040548009,
+      "sndr_db": 35.77694936409901,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4927
+      "bit_density": 0.4846,
+      "bit_density2": 0.5191,
+      "mash_used": true
     },
     {
       "corner": "ss",
       "temp": -40,
       "ngspice_ok": true,
-      "sim_time_s": 50.845343589782715,
-      "enob": 4.741106948533732,
-      "sndr_db": 30.301463830173066,
+      "sim_time_s": 220.54942321777344,
+      "enob": 7.414621323513434,
+      "sndr_db": 46.39602036755087,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.502
+      "bit_density": 0.5007,
+      "bit_density2": 0.4954,
+      "mash_used": true
     },
     {
       "corner": "ss",
       "temp": 125,
       "ngspice_ok": true,
-      "sim_time_s": 48.84218955039978,
-      "enob": 5.594239767236027,
-      "sndr_db": 35.437323398760874,
+      "sim_time_s": 208.77993154525757,
+      "enob": 6.66648117047455,
+      "sndr_db": 41.892216646256784,
       "n_bits": 10000,
       "error": null,
-      "bit_density": 0.4949
+      "bit_density": 0.5004,
+      "bit_density2": 0.5078,
+      "mash_used": true
     }
   ]
 }

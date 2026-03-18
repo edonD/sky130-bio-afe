@@ -72,14 +72,11 @@ VDD  vdd  0  DC 1.8
 VVSS vss  0  DC 0
 
 * ============================================================
-* Input: Vin = VCM + 0.5V*sin(2π*1.5kHz*t) + 30mV*sin(2π*100kHz*t)
-* Main: 0.5V amplitude, coherent at fin=1.5kHz (bin 12 for N=8000)
-* Dither: 30mV at 100kHz (out-of-band: bin 800 >> inband_cutoff=15)
-*   → breaks SDM idle tones at bin 1, reduces low-freq limit cycles
-*   → 100kHz is noise-shaped out of band, no in-band power increase
+* Input: Vin = VCM + 0.65V*sin(2π*1.5kHz*t) + 55mV*sin(2π*5kHz*t)
+* Dither at 5kHz (bin 40 >> inband_cutoff=15) breaks sub-harmonic limit cycles
 * ============================================================
-Vin_src  vin_src_m  0  DC 0.9  SIN(0.9 0.65 1.5e3 0 0)
-Vdith    vin_src    vin_src_m  SIN(0 50m 5e3 0 0)
+Vin_src  vin_src_m  0          DC 0.9  SIN(0.9 0.65 1.5e3 0 0)
+Vdith    vin_src    vin_src_m  SIN(0 45m 5e3 0 0)
 Rvin     vin_src    vin  100
 
 * ============================================================
